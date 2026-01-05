@@ -78,10 +78,19 @@ class CommunityController extends Controller
 
     public function storePost(Request $request, Community $community)
     {
+        // Default post_type to 'text' if not provided
+        $request->merge(['post_type' => $request->input('post_type', 'text')]);
+        
         $request->validate([
             'title' => 'required|max:255',
             'content' => 'required',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'post_type' => 'required|in:text,image,video,poll,event',
+            'poll_question' => 'required_if:post_type,poll',
+            'poll_options' => 'required_if:post_type,poll|array|min:2',
+            'event_title' => 'required_if:post_type,event',
+            'event_start_time' => 'required_if:post_type,event',
+            'event_location' => 'nullable|string|max:255'
         ]);
 
         $imagePath = null;
@@ -95,7 +104,38 @@ class CommunityController extends Controller
         $post->image = $imagePath;
         $post->user_id = auth()->id();
         $post->community_id = $community->id;
+        $post->post_type = $request->post_type;
         $post->save();
+        
+        // Extract hashtags and mentions
+        $post->saveHashtagsAndMentions();
+        
+        // Create poll if post type is poll
+        if ($request->post_type === 'poll') {
+            $poll = \App\Poll::create([
+                'post_id' => $post->id,
+                'question' => $request->poll_question,
+                'options' => $request->poll_options,
+                'ends_at' => $request->poll_ends_at ? now()->parse($request->poll_ends_at) : null
+            ]);
+        }
+        
+        // Create event if post type is event
+        if ($request->post_type === 'event') {
+            $event = \App\Event::create([
+                'post_id' => $post->id,
+                'community_id' => $community->id,
+                'title' => $request->event_title,
+                'description' => $request->content,
+                'start_time' => now()->parse($request->event_start_time),
+                'end_time' => $request->event_end_time ? now()->parse($request->event_end_time) : null,
+                'location' => $request->event_location,
+                'max_attendees' => $request->event_max_attendees
+            ]);
+        }
+        
+        // Create activity
+        \App\Activity::createActivity(auth()->id(), 'post', "Created a new {$request->post_type} post in {$community->name}", $post->id, 'App\Post');
 
         return redirect()->route('community.show', $community)
             ->with('success', 'Post created successfully!');

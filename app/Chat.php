@@ -9,11 +9,14 @@ class Chat extends Model
     protected $fillable = [
         'user_one',
         'user_two',
-        'last_message_at'
+        'last_message_at',
+        'typing_user_id',
+        'typing_started_at'
     ];
 
     protected $dates = [
-        'last_message_at'
+        'last_message_at',
+        'typing_started_at'
     ];
 
     public function userOne()
@@ -64,5 +67,37 @@ class Chat extends Model
             ->where('sender_id', '!=', $userId)
             ->where('is_read', false)
             ->update(['is_read' => true]);
+    }
+
+    // Set typing indicator
+    public function setTyping($userId)
+    {
+        $this->update([
+            'typing_user_id' => $userId,
+            'typing_started_at' => now()
+        ]);
+    }
+
+    // Clear typing indicator
+    public function clearTyping()
+    {
+        $this->update([
+            'typing_user_id' => null,
+            'typing_started_at' => null
+        ]);
+    }
+
+    // Get typing user
+    public function getTypingUser()
+    {
+        if ($this->typing_user_id && $this->typing_started_at) {
+            // Clear if typing started more than 5 seconds ago
+            if ($this->typing_started_at->diffInSeconds(now()) > 5) {
+                $this->clearTyping();
+                return null;
+            }
+            return $this->typing_user_id;
+        }
+        return null;
     }
 }

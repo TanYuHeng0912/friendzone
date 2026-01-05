@@ -49,6 +49,7 @@ class EditUserProfileController extends Controller
             'surname' => $request->get('surname'),
             'email' => $request->get('email'),
             'phone' => $request->get('phone'),
+            'gender' => $request->get('gender'),
             'age' => $request->get('age'),
             'description' => $request->get('description'),
             'relationship' => $request->get('relationship'),
@@ -74,11 +75,15 @@ class EditUserProfileController extends Controller
         $userSettings->update([
             'search_age_from' => $searchAgeRange[0],
             'search_age_to' => $searchAgeRange[1],
-            'search_male' => $request->get('search_male'),
-            'search_female' => $request->get('search_female'),
+            'search_male' => $request->has('search_male') ? $request->get('search_male') : '0',
+            'search_female' => $request->has('search_female') ? $request->get('search_female') : '0',
             'search_tag1' => $request->get('search_tag1'),
             'search_tag2' => $request->get('search_tag2'),
-            'search_tag3' => $request->get('search_tag3')
+            'search_tag3' => $request->get('search_tag3'),
+            'search_country' => $request->get('search_country'),
+            'search_relationship' => $request->get('search_relationship'),
+            'search_has_photos' => $request->has('search_has_photos') ? $request->get('search_has_photos') : '0',
+            'search_online_now' => $request->has('search_online_now') ? $request->get('search_online_now') : '0'
         ]);
 
         return redirect()

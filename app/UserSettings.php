@@ -14,7 +14,11 @@ class UserSettings extends Model
         'search_female',
         'search_tag1',
         'search_tag2',
-        'search_tag3'
+        'search_tag3',
+        'search_country',
+        'search_relationship',
+        'search_has_photos',
+        'search_online_now'
     ];
 
     public function user()

@@ -18,7 +18,9 @@ class User extends Authenticatable
         'is_banned',
         'banned_at',
         'is_suspended',
-        'suspended_until'
+        'suspended_until',
+        'is_online',
+        'last_seen_at'
     ];
 
     /**
@@ -42,6 +44,8 @@ class User extends Authenticatable
         'banned_at' => 'datetime',
         'is_suspended' => 'boolean',
         'suspended_until' => 'datetime',
+        'is_online' => 'boolean',
+        'last_seen_at' => 'datetime',
     ];
 
     public function info()
@@ -153,7 +157,9 @@ class User extends Authenticatable
 
     public function dislikes()
     {
-        return $this->belongsToMany('App\User', 'dislikes', 'user_two', 'user_one');
+        // user_one = the user who dislikes (current user)
+        // user_two = the user being disliked
+        return $this->belongsToMany('App\User', 'dislikes', 'user_one', 'user_two');
     }
 
 public function scopeSearchWithSettings($query, $from, $to, $gender, $id, $searchTag1 = null, $searchTag2 = null, $searchTag3 = null)
@@ -218,25 +224,53 @@ public function scopeSearchWithSettings($query, $from, $to, $gender, $id, $searc
 
     public function scopeSearchWithoutLikesAndDislikes($query, $id)
     {
-        return $query->whereDoesntHave('userLiked', function ($query) use ($id) {
-            $query->where('user_one', $id);
-        })
-            ->whereDoesntHave('dislikes', function ($query) use ($id) {
-                $query->where('user_one', $id);
-            });
+        // Exclude users that the current user has already liked
+        // Check directly in the matches table where user_one = current user and user_two = other user
+        $query->whereNotExists(function ($subquery) use ($id) {
+            $subquery->select(\Illuminate\Support\Facades\DB::raw(1))
+                ->from('matches')
+                ->whereColumn('matches.user_two', 'users.id')
+                ->where('matches.user_one', $id);
+        });
+        
+        // Exclude users that the current user has already disliked
+        // Check directly in the dislikes table where user_one = current user and user_two = other user
+        $query->whereNotExists(function ($subquery) use ($id) {
+            $subquery->select(\Illuminate\Support\Facades\DB::raw(1))
+                ->from('dislikes')
+                ->whereColumn('dislikes.user_two', 'users.id')
+                ->where('dislikes.user_one', $id);
+        });
+        
+        return $query;
     }
 
     public function scopeSearchMatches($query, $id)
     {
-        return $query->whereHas('userLiked', function ($query) use ($id) {
-            $query->where('user_one', $id);
+        // A match exists when:
+        // 1. Current user (id) has liked the other user (matches.user_one = id, matches.user_two = other user)
+        // 2. Other user has liked current user (matches.user_one = other user, matches.user_two = id)
+        return $query->whereExists(function ($subquery) use ($id) {
+            // Check if current user has liked this user
+            $subquery->select(\Illuminate\Support\Facades\DB::raw(1))
+                ->from('matches')
+                ->whereColumn('matches.user_two', 'users.id')
+                ->where('matches.user_one', $id);
         })
-            ->whereHas('likedUser', function ($query) use ($id) {
-                $query->where('user_two', $id);
-            })
-            ->whereDoesntHave('dislikes', function ($query) use ($id) {
-                $query->where('user_one', $id);
-            });
+        ->whereExists(function ($subquery) use ($id) {
+            // Check if this user has liked current user
+            $subquery->select(\Illuminate\Support\Facades\DB::raw(1))
+                ->from('matches')
+                ->whereColumn('matches.user_one', 'users.id')
+                ->where('matches.user_two', $id);
+        })
+        ->whereNotExists(function ($subquery) use ($id) {
+            // Exclude if current user has disliked this user
+            $subquery->select(\Illuminate\Support\Facades\DB::raw(1))
+                ->from('dislikes')
+                ->whereColumn('dislikes.user_two', 'users.id')
+                ->where('dislikes.user_one', $id);
+        });
     }
 
     public function scopeSearchLikes($query, $id)
@@ -247,8 +281,56 @@ public function scopeSearchWithSettings($query, $from, $to, $gender, $id, $searc
             ->whereDoesntHave('likedUser', function ($query) use ($id) {
                 $query->where('user_two', $id);
             })
-            ->whereDoesntHave('dislikes', function ($query) use ($id) {
-                $query->where('user_one', $id);
+            ->whereNotExists(function ($subquery) use ($id) {
+                $subquery->select(\Illuminate\Support\Facades\DB::raw(1))
+                    ->from('dislikes')
+                    ->whereColumn('dislikes.user_two', 'users.id')
+                    ->where('dislikes.user_one', $id);
             });
+    }
+    
+    // Friend relationships
+    public function friendships()
+    {
+        return $this->hasMany('App\Friendship', 'user_id');
+    }
+    
+    public function friendRequests()
+    {
+        return $this->hasMany('App\Friendship', 'friend_id')->where('status', 'pending');
+    }
+    
+    public function friends()
+    {
+        return $this->belongsToMany('App\User', 'friendships', 'user_id', 'friend_id')
+            ->wherePivot('status', 'accepted')
+            ->orWhere(function($query) {
+                $query->where('friendships.user_id', $this->id)
+                      ->where('friendships.status', 'accepted');
+            });
+    }
+    
+    // Activity relationships
+    public function activities()
+    {
+        return $this->hasMany('App\Activity');
+    }
+    
+    // Check if user is online (active within last 5 minutes)
+    public function isOnline()
+    {
+        if (!$this->last_seen_at) {
+            return false;
+        }
+        return $this->last_seen_at->diffInMinutes(now()) <= 5;
+    }
+    
+    // Update last seen timestamp
+    public function updateLastSeen()
+    {
+        $this->update([
+            'last_seen_at' => now(),
+            'is_online' => true
+        ]);
     }
 }

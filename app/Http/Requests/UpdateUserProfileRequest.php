@@ -17,7 +17,7 @@ class UpdateUserProfileRequest extends FormRequest
             'name' => ['required', 'string', 'min:3', 'max:255'],
             'surname' => ['required', 'string', 'min:3', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255'],
-            'phone' => ['required', 'string', 'min:8', 'max:8'],
+            'phone' => ['required', 'string', 'min:8', 'max:20', 'regex:/^[\+]?[0-9\s\-\(\)]+$/'],
             'age' => ['required', 'int', 'min:18', 'max:100'],
             'description' => ['required', 'min:10', 'max:500'],
             'relationship' => ['required'],

@@ -5,523 +5,865 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ion-rangeslider/2.3.1/js/ion.rangeSlider.min.js"></script>
 
-
 @section('content')
-
-    <div class="container">
-        <div class="container mt-5">
+    <div class="profile-page">
+        <div class="container">
             @if (session('status'))
-                <div class="alert alert-success" role="alert">
-                    {{ session('status') }}
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="fas fa-check-circle"></i> {{ session('status') }}
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
                 </div>
             @endif
             <div class="row">
-                <div class="col-lg-4 pb-5">
-                    <div class="author-card pb-3">
-                        <div class="author-card-profile">
-                            <div class="author-card-avatar">
-                                <img src="{{ $userInfo->getPicture() }}"
-                                     id="profile_picture"
-                                     alt="Picture of you">
-                                <div class="text-center upload">
-                                    <form action="{{ route('profile.updateProfilePicture') }}"
-                                          enctype="multipart/form-data" method="post">
-                                        @csrf
-                                        @method('put')
-                                        <input id="custom" type="file" name="picture" onchange="this.form.submit()"
-                                               required="" multiple>
-                                        <label class="btn">
-                                            Change profile photo
-                                            <input
-                                                type="file"
-                                                name="picture"
-                                                onchange="this.form.submit()"
-                                                multiple>
+                <!-- Left Sidebar -->
+                <div class="col-lg-4">
+                    <div class="profile-sidebar">
+                        <!-- Profile Card -->
+                        <div class="profile-card">
+                            <div class="profile-avatar-section">
+                                <div class="profile-avatar-wrapper">
+                                    <img src="{{ $userInfo->getPicture() }}" id="profile_picture" alt="Profile picture" class="profile-avatar">
+                                    <div class="avatar-overlay">
+                                        <label for="profile-picture-upload" class="avatar-upload-btn">
+                                            <i class="fas fa-camera"></i>
+                                            <span>Change Photo</span>
                                         </label>
-                                    </form>
+                                    </div>
+                                </div>
+                                <form action="{{ route('profile.updateProfilePicture') }}" enctype="multipart/form-data" method="post" id="avatar-form" style="display: none;">
+                                    @csrf
+                                    @method('put')
+                                    <input type="file" name="picture" id="profile-picture-upload" onchange="document.getElementById('avatar-form').submit();" accept="image/*">
+                                </form>
+                            </div>
+                            
+                            <div class="profile-info">
+                                <h3 class="profile-name">{{ $userInfo->name . ' ' . $userInfo->surname }}</h3>
+                                <p class="profile-joined">
+                                    <i class="fas fa-calendar-alt"></i> Joined {{ $user->created_at->format('M Y') }}
+                                </p>
+                                
+                                <!-- Profile Completeness -->
+                                @php
+                                    $completeness = $userInfo->getCompletenessPercentage();
+                                    $missingFields = $userInfo->getMissingFields();
+                                @endphp
+                                <div class="profile-completeness">
+                                    <div class="completeness-header">
+                                        <span class="completeness-label">
+                                            <i class="fas fa-chart-line"></i> Profile Completeness
+                                        </span>
+                                        <span class="completeness-percentage">{{ $completeness }}%</span>
+                                    </div>
+                                    <div class="progress completeness-progress">
+                                        <div class="progress-bar" role="progressbar" 
+                                             style="width: {{ $completeness }}%" 
+                                             aria-valuenow="{{ $completeness }}" 
+                                             aria-valuemin="0" 
+                                             aria-valuemax="100">
+                                        </div>
+                                    </div>
+                                    @if(count($missingFields) > 0 && $completeness < 100)
+                                        <div class="completeness-tips">
+                                            <i class="fas fa-info-circle"></i> 
+                                            <span>Add: {{ implode(', ', array_slice($missingFields, 0, 3)) }}{{ count($missingFields) > 3 ? '...' : '' }}</span>
+                                        </div>
+                                    @elseif($completeness == 100)
+                                        <div class="completeness-complete">
+                                            <i class="fas fa-check-circle"></i> Profile complete!
+                                        </div>
+                                    @endif
                                 </div>
                             </div>
-                            <div class="author-card-details">
-                                <h5 id="full-name" class="author-card-name text-lg">{{ $userInfo->name . ' ' . $userInfo->surname }}</h5>
-                                <h6 id="joined" class="author-card-position">Joined {{ $user->created_at }}</h6>
-                            </div>
                         </div>
-                    </div>
-                    <div class="wizard">
-                        <nav class="list-group list-group-flush">
-                            <a id="active" class="list-group-item active" href="{{ route('profile.updateProfile') }}">Edit
-                                Profile</a>
-                            <a id="inactive" class="list-group-item" href="{{ route('profile.updateSettings') }}">Edit
-                                Settings</a>
-                            <form action="{{ route('profile.destroy') }}" method="post">
+                        
+                        <!-- Navigation Menu -->
+                        <div class="profile-nav">
+                            <a href="{{ route('profile.updateProfile') }}" class="nav-item active">
+                                <i class="fas fa-user-edit"></i>
+                                <span>Edit Profile</span>
+                            </a>
+                            <a href="{{ route('profile.updateSettings') }}" class="nav-item">
+                                <i class="fas fa-cog"></i>
+                                <span>Settings</span>
+                            </a>
+                            <form action="{{ route('profile.destroy') }}" method="post" class="delete-form">
                                 @csrf
                                 @method('delete')
-
-                                <a id="delete" class="list-group-item" href="javascript:$('form').submit()">Delete
-                                    Profile</a>
+                                <button type="submit" class="nav-item nav-item-danger" onclick="return confirm('Are you sure you want to delete your profile? This action cannot be undone.');">
+                                    <i class="fas fa-trash-alt"></i>
+                                    <span>Delete Profile</span>
+                                </button>
                             </form>
-                        </nav>
+                        </div>
                     </div>
                 </div>
 
-                <div class="col-lg-8 pb-5">
-                    <form class="row" method='post' action="{{ route('profile.updateProfile') }}">
-                        @csrf
-
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label for="name">Name</label>
-                                <input class="form-control" type="text" name="name" id="name"
-                                       value="{{ $userInfo->name }}"
-                                       required>
-                            </div>
+                <!-- Right Content -->
+                <div class="col-lg-8">
+                    <div class="profile-content">
+                        <div class="content-header">
+                            <h2><i class="fas fa-user-edit"></i> Edit Profile</h2>
+                            <p>Update your personal information and preferences</p>
                         </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label for="surname">Surname</label>
-                                <input class="form-control" type="text" name="surname" id="surname"
-                                       value="{{ $userInfo->surname }}"
-                                       required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label for="email">E-mail</label>
-                                <input class="form-control" type="email" name="email" id="email"
-                                       value="{{ $user->email }}" required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label for="phone">Phone Number</label>
-                                <input class="form-control" type="text" name="phone" id="phone"
-                                       value="{{ $userInfo->phone }}"
-                                       required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label for="age">Age</label>
-                                <input type="text" class="js-range-slider" name="age" id="age" value=""
-                                       data-type="single"
-                                       data-min="18"
-                                       data-max="100"
-                                       data-from="{{ $userInfo->age }}"
-                                       data-grid="false"
-                                />
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="description">Bio</label>
-                            <textarea class="form-control" id="description" name="description" rows="3"
-                                      style="resize:none;" required
-                                      autocomplete="description">{{ $userInfo->description }}</textarea>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="relationship">Relationship status:</label>
-                            <select class="form-control" id="relationship" name="relationship">
-                                <option value="{{ $userInfo->relationship }}">{{ $userInfo->relationship }}</option>
-                                <option value="Single">Single</option>
-                                <option value="Taken">Taken</option>
-                                <option value="Engaged">Engaged</option>
-                                <option value="Married">Married</option>
-                                <option value="It's complicated">It's complicated</option>
-                                <option value="Open relationship">Open relationship</option>
-                            </select>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label for="country">Country:</label>
-                            <select class="form-control" id="country" name="country">
-                                <option value="{{ $userInfo->country }}">{{ $userInfo->country }}</option>
-                                <option value="Latvia">Latvia</option>
-                                <option value="Afghanistan">Afghanistan</option>
-                                <option value="Åland Islands">Åland Islands</option>
-                                <option value="Albania">Albania</option>
-                                <option value="Algeria">Algeria</option>
-                                <option value="American Samoa">American Samoa</option>
-                                <option value="Andorra">Andorra</option>
-                                <option value="Angola">Angola</option>
-                                <option value="Anguilla">Anguilla</option>
-                                <option value="Antarctica">Antarctica</option>
-                                <option value="Antigua and Barbuda">Antigua and Barbuda</option>
-                                <option value="Argentina">Argentina</option>
-                                <option value="Armenia">Armenia</option>
-                                <option value="Aruba">Aruba</option>
-                                <option value="Australia">Australia</option>
-                                <option value="Austria">Austria</option>
-                                <option value="Azerbaijan">Azerbaijan</option>
-                                <option value="Bahamas">Bahamas</option>
-                                <option value="Bahrain">Bahrain</option>
-                                <option value="Bangladesh">Bangladesh</option>
-                                <option value="Barbados">Barbados</option>
-                                <option value="Belarus">Belarus</option>
-                                <option value="Belgium">Belgium</option>
-                                <option value="Belize">Belize</option>
-                                <option value="Benin">Benin</option>
-                                <option value="Bermuda">Bermuda</option>
-                                <option value="Bhutan">Bhutan</option>
-                                <option value="Bolivia">Bolivia</option>
-                                <option value="Bosnia and Herzegovina">Bosnia and Herzegovina</option>
-                                <option value="Botswana">Botswana</option>
-                                <option value="Bouvet Island">Bouvet Island</option>
-                                <option value="Brazil">Brazil</option>
-                                <option value="British Indian Ocean Territory">British Indian Ocean Territory</option>
-                                <option value="Brunei Darussalam">Brunei Darussalam</option>
-                                <option value="Bulgaria">Bulgaria</option>
-                                <option value="Burkina Faso">Burkina Faso</option>
-                                <option value="Burundi">Burundi</option>
-                                <option value="Cambodia">Cambodia</option>
-                                <option value="Cameroon">Cameroon</option>
-                                <option value="Canada">Canada</option>
-                                <option value="Cape Verde">Cape Verde</option>
-                                <option value="Cayman Islands">Cayman Islands</option>
-                                <option value="Central African Republic">Central African Republic</option>
-                                <option value="Chad">Chad</option>
-                                <option value="Chile">Chile</option>
-                                <option value="China">China</option>
-                                <option value="Christmas Island">Christmas Island</option>
-                                <option value="Cocos (Keeling) Islands">Cocos (Keeling) Islands</option>
-                                <option value="Colombia">Colombia</option>
-                                <option value="Comoros">Comoros</option>
-                                <option value="Congo">Congo</option>
-                                <option value="Cook Islands">Cook Islands</option>
-                                <option value="Costa Rica">Costa Rica</option>
-                                <option value="Cote D'ivoire">Cote D'ivoire</option>
-                                <option value="Croatia">Croatia</option>
-                                <option value="Cuba">Cuba</option>
-                                <option value="Cyprus">Cyprus</option>
-                                <option value="Czech Republic">Czech Republic</option>
-                                <option value="Denmark">Denmark</option>
-                                <option value="Djibouti">Djibouti</option>
-                                <option value="Dominica">Dominica</option>
-                                <option value="Dominican Republic">Dominican Republic</option>
-                                <option value="Ecuador">Ecuador</option>
-                                <option value="Egypt">Egypt</option>
-                                <option value="El Salvador">El Salvador</option>
-                                <option value="Equatorial Guinea">Equatorial Guinea</option>
-                                <option value="Eritrea">Eritrea</option>
-                                <option value="Estonia">Estonia</option>
-                                <option value="Ethiopia">Ethiopia</option>
-                                <option value="Falkland Islands (Malvinas)">Falkland Islands (Malvinas)</option>
-                                <option value="Faroe Islands">Faroe Islands</option>
-                                <option value="Fiji">Fiji</option>
-                                <option value="Finland">Finland</option>
-                                <option value="France">France</option>
-                                <option value="French Guiana">French Guiana</option>
-                                <option value="French Polynesia">French Polynesia</option>
-                                <option value="French Southern Territories">French Southern Territories</option>
-                                <option value="Gabon">Gabon</option>
-                                <option value="Gambia">Gambia</option>
-                                <option value="Georgia">Georgia</option>
-                                <option value="Germany">Germany</option>
-                                <option value="Ghana">Ghana</option>
-                                <option value="Gibraltar">Gibraltar</option>
-                                <option value="Greece">Greece</option>
-                                <option value="Greenland">Greenland</option>
-                                <option value="Grenada">Grenada</option>
-                                <option value="Guadeloupe">Guadeloupe</option>
-                                <option value="Guam">Guam</option>
-                                <option value="Guatemala">Guatemala</option>
-                                <option value="Guernsey">Guernsey</option>
-                                <option value="Guinea">Guinea</option>
-                                <option value="Guinea-bissau">Guinea-bissau</option>
-                                <option value="Guyana">Guyana</option>
-                                <option value="Haiti">Haiti</option>
-                                <option value="Heard Island and Mcdonald Islands">Heard Island and Mcdonald Islands
-                                </option>
-                                <option value="Holy See (Vatican City State)">Holy See (Vatican City State)</option>
-                                <option value="Honduras">Honduras</option>
-                                <option value="Hong Kong">Hong Kong</option>
-                                <option value="Hungary">Hungary</option>
-                                <option value="Iceland">Iceland</option>
-                                <option value="India">India</option>
-                                <option value="Indonesia">Indonesia</option>
-                                <option value="Iran">Iran</option>
-                                <option value="Iraq">Iraq</option>
-                                <option value="Ireland">Ireland</option>
-                                <option value="Isle of Man">Isle of Man</option>
-                                <option value="Israel">Israel</option>
-                                <option value="Italy">Italy</option>
-                                <option value="Jamaica">Jamaica</option>
-                                <option value="Japan">Japan</option>
-                                <option value="Jersey">Jersey</option>
-                                <option value="Jordan">Jordan</option>
-                                <option value="Kazakhstan">Kazakhstan</option>
-                                <option value="Kenya">Kenya</option>
-                                <option value="Kiribati">Kiribati</option>
-                                <option value="Korea">Korea</option>
-                                <option value="Kuwait">Kuwait</option>
-                                <option value="Kyrgyzstan">Kyrgyzstan</option>
-                                <option value="Lao People's Democratic Republic">Lao People's Democratic Republic
-                                </option>
-                                <option value="Lebanon">Lebanon</option>
-                                <option value="Lesotho">Lesotho</option>
-                                <option value="Liberia">Liberia</option>
-                                <option value="Libyan Arab Jamahiriya">Libyan Arab Jamahiriya</option>
-                                <option value="Liechtenstein">Liechtenstein</option>
-                                <option value="Lithuania">Lithuania</option>
-                                <option value="Luxembourg">Luxembourg</option>
-                                <option value="Macao">Macao</option>
-                                <option value="Macedonia">Macedonia</option>
-                                <option value="Madagascar">Madagascar</option>
-                                <option value="Malawi">Malawi</option>
-                                <option value="Malaysia">Malaysia</option>
-                                <option value="Maldives">Maldives</option>
-                                <option value="Mali">Mali</option>
-                                <option value="Malta">Malta</option>
-                                <option value="Marshall Islands">Marshall Islands</option>
-                                <option value="Martinique">Martinique</option>
-                                <option value="Mauritania">Mauritania</option>
-                                <option value="Mauritius">Mauritius</option>
-                                <option value="Mayotte">Mayotte</option>
-                                <option value="Mexico">Mexico</option>
-                                <option value="Micronesia">Micronesia</option>
-                                <option value="Moldova, Republic of">Moldova</option>
-                                <option value="Monaco">Monaco</option>
-                                <option value="Mongolia">Mongolia</option>
-                                <option value="Montenegro">Montenegro</option>
-                                <option value="Montserrat">Montserrat</option>
-                                <option value="Morocco">Morocco</option>
-                                <option value="Mozambique">Mozambique</option>
-                                <option value="Myanmar">Myanmar</option>
-                                <option value="Namibia">Namibia</option>
-                                <option value="Nauru">Nauru</option>
-                                <option value="Nepal">Nepal</option>
-                                <option value="Netherlands">Netherlands</option>
-                                <option value="Netherlands Antilles">Netherlands Antilles</option>
-                                <option value="New Caledonia">New Caledonia</option>
-                                <option value="New Zealand">New Zealand</option>
-                                <option value="Nicaragua">Nicaragua</option>
-                                <option value="Niger">Niger</option>
-                                <option value="Nigeria">Nigeria</option>
-                                <option value="Niue">Niue</option>
-                                <option value="Norfolk Island">Norfolk Island</option>
-                                <option value="Northern Mariana Islands">Northern Mariana Islands</option>
-                                <option value="Norway">Norway</option>
-                                <option value="Oman">Oman</option>
-                                <option value="Pakistan">Pakistan</option>
-                                <option value="Palau">Palau</option>
-                                <option value="Palestinian Territory">Palestinian Territory</option>
-                                <option value="Panama">Panama</option>
-                                <option value="Papua New Guinea">Papua New Guinea</option>
-                                <option value="Paraguay">Paraguay</option>
-                                <option value="Peru">Peru</option>
-                                <option value="Philippines">Philippines</option>
-                                <option value="Pitcairn">Pitcairn</option>
-                                <option value="Poland">Poland</option>
-                                <option value="Portugal">Portugal</option>
-                                <option value="Puerto Rico">Puerto Rico</option>
-                                <option value="Qatar">Qatar</option>
-                                <option value="Reunion">Reunion</option>
-                                <option value="Romania">Romania</option>
-                                <option value="Russian Federation">Russian Federation</option>
-                                <option value="Rwanda">Rwanda</option>
-                                <option value="Saint Helena">Saint Helena</option>
-                                <option value="Saint Kitts and Nevis">Saint Kitts and Nevis</option>
-                                <option value="Saint Lucia">Saint Lucia</option>
-                                <option value="Saint Pierre and Miquelon">Saint Pierre and Miquelon</option>
-                                <option value="Saint Vincent and The Grenadines">Saint Vincent and The Grenadines
-                                </option>
-                                <option value="Samoa">Samoa</option>
-                                <option value="San Marino">San Marino</option>
-                                <option value="Sao Tome and Principe">Sao Tome and Principe</option>
-                                <option value="Saudi Arabia">Saudi Arabia</option>
-                                <option value="Senegal">Senegal</option>
-                                <option value="Serbia">Serbia</option>
-                                <option value="Seychelles">Seychelles</option>
-                                <option value="Sierra Leone">Sierra Leone</option>
-                                <option value="Singapore">Singapore</option>
-                                <option value="Slovakia">Slovakia</option>
-                                <option value="Slovenia">Slovenia</option>
-                                <option value="Solomon Islands">Solomon Islands</option>
-                                <option value="Somalia">Somalia</option>
-                                <option value="South Africa">South Africa</option>
-                                <option value="South Georgia and The South Sandwich Islands">South Georgia and The South
-                                    Sandwich Islands
-                                </option>
-                                <option value="Spain">Spain</option>
-                                <option value="Sri Lanka">Sri Lanka</option>
-                                <option value="Sudan">Sudan</option>
-                                <option value="Suriname">Suriname</option>
-                                <option value="Svalbard and Jan Mayen">Svalbard and Jan Mayen</option>
-                                <option value="Swaziland">Swaziland</option>
-                                <option value="Sweden">Sweden</option>
-                                <option value="Switzerland">Switzerland</option>
-                                <option value="Syrian Arab Republic">Syrian Arab Republic</option>
-                                <option value="Taiwan, Province of China">Taiwan, Province of China</option>
-                                <option value="Tajikistan">Tajikistan</option>
-                                <option value="Tanzania">Tanzania</option>
-                                <option value="Thailand">Thailand</option>
-                                <option value="Timor-leste">Timor-leste</option>
-                                <option value="Togo">Togo</option>
-                                <option value="Tokelau">Tokelau</option>
-                                <option value="Tonga">Tonga</option>
-                                <option value="Trinidad and Tobago">Trinidad and Tobago</option>
-                                <option value="Tunisia">Tunisia</option>
-                                <option value="Turkey">Turkey</option>
-                                <option value="Turkmenistan">Turkmenistan</option>
-                                <option value="Turks and Caicos Islands">Turks and Caicos Islands</option>
-                                <option value="Tuvalu">Tuvalu</option>
-                                <option value="Uganda">Uganda</option>
-                                <option value="Ukraine">Ukraine</option>
-                                <option value="United Arab Emirates">United Arab Emirates</option>
-                                <option value="United Kingdom">United Kingdom</option>
-                                <option value="United States">United States</option>
-                                <option value="United States Minor Outlying Islands">United States Minor Outlying
-                                    Islands
-                                </option>
-                                <option value="Uruguay">Uruguay</option>
-                                <option value="Uzbekistan">Uzbekistan</option>
-                                <option value="Vanuatu">Vanuatu</option>
-                                <option value="Venezuela">Venezuela</option>
-                                <option value="Viet Nam">Viet Nam</option>
-                                <option value="Virgin Islands, British">Virgin Islands, British</option>
-                                <option value="Virgin Islands, U.S.">Virgin Islands, U.S.</option>
-                                <option value="Wallis and Futuna">Wallis and Futuna</option>
-                                <option value="Western Sahara">Western Sahara</option>
-                                <option value="Yemen">Yemen</option>
-                                <option value="Zambia">Zambia</option>
-                                <option value="Zimbabwe">Zimbabwe</option>
-                            </select>
+                        
+                        <form method='post' action="{{ route('profile.updateProfile') }}" class="profile-form">
+                            @csrf
                             
-                        </div>
-                        <div class="col-md-6">
-                            <label for="languages">Languages:</label>
-                            <textarea class="form-control" id="languages" name="languages" rows="2"
-                                      style="resize:none;" required
-                                      autocomplete="languages">{{ $userInfo->languages }}</textarea>
-
-                        <div class="col-md-6">
-                            <label for="tag1">Interest on:</label>
-                            <select class="form-control" id="tag1" name="tag1" rows="2">
-                            <option value="{{ $userInfo->tag1 }}">{{ $userInfo->tag1 }}</option>
-                            <option value="Movie ">Movie</option> 
-                            <option value="Travelling">Travelling</option> 
-                            <option value="Art">Art</option> 
-                            <option value="Sport">Sport</option> 
-                            <option value="Cooking">Cooking</option> 
-                            <option value="Gaming">Gaming</option> 
-                            <option value="Anime">Anime</option> 
-                            <option value="Reading">Reading</option> 
-                            <option value="Volunteering">Volunteering</option> 
-                            <option value="Photography">Photography</option>  
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="tag2"></label>
-                            <select class="form-control" id="tag2" name="tag2" rows="2">
-                            <option value="{{ $userInfo->tag2 }}">{{ $userInfo->tag2 }}</option>
-                            <option value="Movie ">Movie</option> 
-                            <option value="Travelling">Travelling</option> 
-                            <option value="Art">Art</option> 
-                            <option value="Sport">Sport</option> 
-                            <option value="Cooking">Cooking</option> 
-                            <option value="Gaming">Gaming</option> 
-                            <option value="Anime">Anime</option> 
-                            <option value="Reading">Reading</option> 
-                            <option value="Volunteering">Volunteering</option> 
-                            <option value="Photography">Photography</option>  
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="tag3"></label>
-                            <select class="form-control" id="tag3" name="tag3" rows="2">
-                            <option value="{{ $userInfo->tag3 }}">{{ $userInfo->tag3 }}</option>
-                            <option value="Movie ">Movie</option> 
-                            <option value="Travelling">Travelling</option> 
-                            <option value="Art">Art</option> 
-                            <option value="Sport">Sport</option> 
-                            <option value="Cooking">Cooking</option> 
-                            <option value="Gaming">Gaming</option> 
-                            <option value="Anime">Anime</option> 
-                            <option value="Reading">Reading</option> 
-                            <option value="Volunteering">Volunteering</option> 
-                            <option value="Photography">Photography</option>  
-                            </select>
-                        </div>
-
-                        <div class="col-12">
-                            <hr class="mt-2 mb-3">
-                            <div class="d-flex flex-wrap justify-content-between align-items-center">
-                                <button type="submit" id="update-button" class="btn btn-primary">Update</button>
+                            <div class="form-section">
+                                <h4 class="section-title">
+                                    <i class="fas fa-user"></i> Personal Information
+                                </h4>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="name">
+                                                <i class="fas fa-signature"></i> Name
+                                            </label>
+                                            <input class="form-control" type="text" name="name" id="name"
+                                                   value="{{ $userInfo->name }}" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="surname">
+                                                <i class="fas fa-signature"></i> Surname
+                                            </label>
+                                            <input class="form-control" type="text" name="surname" id="surname"
+                                                   value="{{ $userInfo->surname }}" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="email">
+                                                <i class="fas fa-envelope"></i> E-mail
+                                            </label>
+                                            <input class="form-control" type="email" name="email" id="email"
+                                                   value="{{ $user->email }}" required>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="phone">
+                                                <i class="fas fa-phone"></i> Phone Number
+                                            </label>
+                                            <input class="form-control" type="tel" name="phone" id="phone"
+                                                   value="{{ $userInfo->phone }}" required
+                                                   placeholder="+1 (555) 123-4567"
+                                                   pattern="[\+]?[0-9\s\-\(\)]+">
+                                            <small class="form-text text-muted">Format: +1 (555) 123-4567</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="gender">
+                                                <i class="fas fa-venus-mars"></i> Gender
+                                            </label>
+                                            <div class="radio-group">
+                                                <div class="radio-option">
+                                                    <input type="radio" name="gender" id="gender_male" value="male" {{ $userInfo->gender == 'male' ? 'checked' : '' }} required>
+                                                    <label for="gender_male">
+                                                        <i class="fas fa-mars"></i> Male
+                                                    </label>
+                                                </div>
+                                                <div class="radio-option">
+                                                    <input type="radio" name="gender" id="gender_female" value="female" {{ $userInfo->gender == 'female' ? 'checked' : '' }} required>
+                                                    <label for="gender_female">
+                                                        <i class="fas fa-venus"></i> Female
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="age">
+                                                <i class="fas fa-birthday-cake"></i> Age
+                                            </label>
+                                            <input type="text" class="js-range-slider" name="age" id="age" value=""
+                                                   data-type="single"
+                                                   data-min="18"
+                                                   data-max="100"
+                                                   data-from="{{ $userInfo->age }}"
+                                                   data-grid="false"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="relationship">
+                                                <i class="fas fa-heart"></i> Relationship Status
+                                            </label>
+                                            <select class="form-control form-select" id="relationship" name="relationship" required>
+                                                <option value="">Select relationship status</option>
+                                                <option value="Single" {{ $userInfo->relationship == 'Single' ? 'selected' : '' }}>Single</option>
+                                                <option value="Taken" {{ $userInfo->relationship == 'Taken' ? 'selected' : '' }}>Taken</option>
+                                                <option value="Engaged" {{ $userInfo->relationship == 'Engaged' ? 'selected' : '' }}>Engaged</option>
+                                                <option value="Married" {{ $userInfo->relationship == 'Married' ? 'selected' : '' }}>Married</option>
+                                                <option value="It's complicated" {{ $userInfo->relationship == "It's complicated" ? 'selected' : '' }}>It's complicated</option>
+                                                <option value="Open relationship" {{ $userInfo->relationship == 'Open relationship' ? 'selected' : '' }}>Open relationship</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </form>
+
+                            <div class="form-section">
+                                <h4 class="section-title">
+                                    <i class="fas fa-globe"></i> Location & Languages
+                                </h4>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="country">
+                                                <i class="fas fa-globe"></i> Country
+                                            </label>
+                                            <select class="form-control form-select" id="country" name="country" required>
+                                                <option value="">Select country</option>
+                                                @include('partials.countries', ['selected' => $userInfo->country])
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="languages">
+                                                <i class="fas fa-language"></i> Languages
+                                            </label>
+                                            <textarea class="form-control" id="languages" name="languages" rows="2"
+                                                      style="resize:none;" required
+                                                      placeholder="e.g., English, Chinese, Spanish">{{ $userInfo->languages }}</textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-section">
+                                <h4 class="section-title">
+                                    <i class="fas fa-info-circle"></i> About Me
+                                </h4>
+                                <div class="form-group">
+                                    <label for="description">
+                                        <i class="fas fa-align-left"></i> Bio
+                                    </label>
+                                    <textarea class="form-control" id="description" name="description" rows="5"
+                                              style="resize:none;" required
+                                              placeholder="Tell others about yourself...">{{ $userInfo->description }}</textarea>
+                                </div>
+                            </div>
+
+                            <div class="form-section">
+                                <h4 class="section-title">
+                                    <i class="fas fa-star"></i> Interests
+                                </h4>
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="form-group">
+                                            <label for="tag1">Interest 1</label>
+                                            <select class="form-control" id="tag1" name="tag1">
+                                                <option value="{{ $userInfo->tag1 }}">{{ $userInfo->tag1 ?: 'None' }}</option>
+                                                <option value="">None</option>
+                                                <option value="Movie">Movie</option> 
+                                                <option value="Travelling">Travelling</option> 
+                                                <option value="Art">Art</option> 
+                                                <option value="Sport">Sport</option> 
+                                                <option value="Cooking">Cooking</option> 
+                                                <option value="Gaming">Gaming</option> 
+                                                <option value="Anime">Anime</option> 
+                                                <option value="Reading">Reading</option> 
+                                                <option value="Volunteering">Volunteering</option> 
+                                                <option value="Photography">Photography</option>  
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-group">
+                                            <label for="tag2">Interest 2</label>
+                                            <select class="form-control" id="tag2" name="tag2">
+                                                <option value="{{ $userInfo->tag2 }}">{{ $userInfo->tag2 ?: 'None' }}</option>
+                                                <option value="">None</option>
+                                                <option value="Movie">Movie</option> 
+                                                <option value="Travelling">Travelling</option> 
+                                                <option value="Art">Art</option> 
+                                                <option value="Sport">Sport</option> 
+                                                <option value="Cooking">Cooking</option> 
+                                                <option value="Gaming">Gaming</option> 
+                                                <option value="Anime">Anime</option> 
+                                                <option value="Reading">Reading</option> 
+                                                <option value="Volunteering">Volunteering</option> 
+                                                <option value="Photography">Photography</option>  
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-group">
+                                            <label for="tag3">Interest 3</label>
+                                            <select class="form-control" id="tag3" name="tag3">
+                                                <option value="{{ $userInfo->tag3 }}">{{ $userInfo->tag3 ?: 'None' }}</option>
+                                                <option value="">None</option>
+                                                <option value="Movie">Movie</option> 
+                                                <option value="Travelling">Travelling</option> 
+                                                <option value="Art">Art</option> 
+                                                <option value="Sport">Sport</option> 
+                                                <option value="Cooking">Cooking</option> 
+                                                <option value="Gaming">Gaming</option> 
+                                                <option value="Anime">Anime</option> 
+                                                <option value="Reading">Reading</option> 
+                                                <option value="Volunteering">Volunteering</option> 
+                                                <option value="Photography">Photography</option>  
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-save"></i> Save Changes
+                                </button>
+                                <a href="{{ route('home') }}" class="btn btn-secondary btn-lg">
+                                    <i class="fas fa-times"></i> Cancel
+                                </a>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
-
     </div>
 
     <script>
         $(".js-range-slider").ionRangeSlider();
-        document.registrationForm.ageInputId.oninput = function () {
-            document.registrationForm.ageOutputId.value = document.registrationForm.ageInputId.value;
-        }
     </script>
 @endsection
+
 <style>
-    .text-center.upload input {
-        display: none
+    .profile-page {
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        padding: 30px 0;
     }
 
-    .text-center.upload {
-        color: white;
-        font-weight: bold;
-        text-decoration: underline;
+    .profile-sidebar {
+        position: sticky;
+        top: 20px;
     }
 
-    .text-center .btn {
-        color: black;
-        background-color: white;
-        padding: 8px 20px;
-        border-radius: 8px;
-        font-size: 20px;
-        font-weight: bold;
-        margin-top: 20px;
+    .profile-card {
+        background: white;
+        border-radius: 20px;
+        padding: 25px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
         margin-bottom: 20px;
-        box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+        transition: transform 0.3s ease;
     }
 
-    #profile_picture {
+    .profile-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+    }
+
+    .profile-avatar-section {
+        text-align: center;
+        margin-bottom: 20px;
+    }
+
+    .profile-avatar-wrapper {
+        position: relative;
+        display: inline-block;
+        width: 180px;
+        height: 180px;
+        border-radius: 50%;
+        overflow: hidden;
+        border: 5px solid #667eea;
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+    }
+
+    .profile-avatar {
         width: 100%;
-        border-radius: 10px;
-        box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+        height: 100%;
+        object-fit: cover;
     }
 
-    #full-name {
-        font-weight: bold;
-        text-align: center;
+    .avatar-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(102, 126, 234, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        border-radius: 50%;
     }
 
-    #joined {
-        font-style: italic;
-        text-align: center;
+    .profile-avatar-wrapper:hover .avatar-overlay {
+        opacity: 1;
     }
 
-    .list-group {
-        box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
-    }
-
-    #active {
-        background: #212529;
-        border: none;
-    }
-
-    #inactive {
-        color: #212529;
-    }
-
-    #delete {
-        background: red;
+    .avatar-upload-btn {
         color: white;
-        margin-bottom: -14px;
+        cursor: pointer;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
     }
 
-    #update-button {
-        background: #212529;
+    .avatar-upload-btn i {
+        font-size: 1.5rem;
+    }
+
+    .profile-info {
+        text-align: center;
+    }
+
+    .profile-name {
+        font-family: 'Poppins', sans-serif;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1a202c;
+        margin-bottom: 8px;
+    }
+
+    .profile-joined {
+        color: #718096;
+        font-size: 0.9rem;
+        margin-bottom: 20px;
+    }
+
+    .profile-joined i {
+        margin-right: 5px;
+        color: #667eea;
+    }
+
+    .profile-completeness {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 12px;
+        margin-top: 15px;
+    }
+
+    .completeness-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .completeness-label {
+        font-weight: 600;
+        color: #2d3748;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .completeness-label i {
+        color: #667eea;
+    }
+
+    .completeness-percentage {
+        font-weight: 700;
+        color: #667eea;
+        font-size: 1.2rem;
+    }
+
+    .completeness-progress {
+        height: 10px;
+        border-radius: 10px;
+        background: #e2e8f0;
+        margin-bottom: 10px;
+        overflow: hidden;
+    }
+
+    .completeness-progress .progress-bar {
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        border-radius: 10px;
+        transition: width 0.5s ease;
+    }
+
+    .completeness-tips {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.85rem;
+        color: #718096;
+    }
+
+    .completeness-tips i {
+        color: #4299e1;
+    }
+
+    .completeness-complete {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.85rem;
+        color: #48bb78;
+        font-weight: 600;
+    }
+
+    .profile-nav {
+        background: white;
+        border-radius: 20px;
+        padding: 10px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    }
+
+    .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 15px 20px;
+        border-radius: 12px;
+        text-decoration: none;
+        color: #2d3748;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        margin-bottom: 5px;
         border: none;
-        box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+        background: none;
+        width: 100%;
+        text-align: left;
+        cursor: pointer;
+    }
+
+    .nav-item i {
+        width: 20px;
+        color: #667eea;
+        font-size: 1.1rem;
+    }
+
+    .nav-item:hover {
+        background: #f7fafc;
+        color: #667eea;
+        transform: translateX(5px);
+    }
+
+    .nav-item.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .nav-item.active i {
+        color: white;
+    }
+
+    .nav-item-danger {
+        color: #f56565 !important;
+    }
+
+    .nav-item-danger i {
+        color: #f56565 !important;
+    }
+
+    .nav-item-danger:hover {
+        background: #fed7d7;
+        color: #c53030 !important;
+    }
+
+    .delete-form {
+        margin: 0;
+        padding: 0;
+    }
+
+    .profile-content {
+        background: white;
+        border-radius: 20px;
+        padding: 35px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    }
+
+    .content-header {
+        margin-bottom: 30px;
+        padding-bottom: 20px;
+        border-bottom: 2px solid #e2e8f0;
+    }
+
+    .content-header h2 {
+        font-family: 'Poppins', sans-serif;
+        font-size: 2rem;
+        font-weight: 700;
+        color: #1a202c;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .content-header h2 i {
+        color: #667eea;
+    }
+
+    .content-header p {
+        color: #718096;
+        font-size: 1rem;
+        margin: 0;
+    }
+
+    .form-section {
+        margin-bottom: 35px;
+        padding-bottom: 30px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .form-section:last-of-type {
+        border-bottom: none;
+    }
+
+    .section-title {
+        font-family: 'Poppins', sans-serif;
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: #2d3748;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .section-title i {
+        color: #667eea;
+        font-size: 1.1rem;
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-group label {
+        font-weight: 600;
+        color: #2d3748;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.95rem;
+    }
+
+    .form-group label i {
+        color: #667eea;
+        font-size: 0.9rem;
+    }
+
+    .form-control {
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 12px 15px;
+        font-size: 0.95rem;
+        transition: all 0.3s ease;
+    }
+
+    .form-control:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        outline: none;
+    }
+
+    /* Enhanced Select Dropdown Styling */
+    .form-select {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23667eea' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 15px center;
+        background-size: 12px;
+        padding-right: 40px;
+        cursor: pointer;
+    }
+
+    .form-select:hover {
+        border-color: #cbd5e0;
+    }
+
+    .form-select:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .dark-mode .form-select {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23a0aec0' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    }
+
+    .form-actions {
+        display: flex;
+        gap: 15px;
+        justify-content: flex-end;
+        margin-top: 30px;
+        padding-top: 25px;
+        border-top: 2px solid #e2e8f0;
+    }
+
+    .btn-lg {
+        padding: 12px 30px;
+        font-size: 1rem;
+        font-weight: 600;
+        border-radius: 12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        transition: all 0.3s ease;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-secondary {
+        background: #e2e8f0;
+        color: #2d3748;
+        border: none;
+    }
+
+    .btn-secondary:hover {
+        background: #cbd5e0;
+        transform: translateY(-2px);
+    }
+
+    .alert {
+        border-radius: 12px;
+        border: none;
+        padding: 15px 20px;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .alert-success {
+        background: #c6f6d5;
+        color: #22543d;
+    }
+
+    .alert-success i {
+        margin-right: 8px;
+    }
+
+    /* Dark Mode */
+    .dark-mode .profile-page {
+        background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+    }
+
+    .dark-mode .profile-card,
+    .dark-mode .profile-nav,
+    .dark-mode .profile-content {
+        background: var(--card-bg);
+        color: var(--text-color);
+    }
+
+    .dark-mode .profile-name,
+    .dark-mode .content-header h2,
+    .dark-mode .section-title {
+        color: var(--text-color);
+    }
+
+    .dark-mode .form-control {
+        background: #4a5568;
+        border-color: var(--border-color);
+        color: var(--text-color);
+    }
+
+    .dark-mode .form-control:focus {
+        border-color: #667eea;
+    }
+
+    .dark-mode .nav-item:hover {
+        background: #4a5568;
+    }
+
+    /* Radio Group Styles */
+    .radio-group {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .radio-option {
+        flex: 1;
+        min-width: 120px;
+    }
+
+    .radio-option input[type="radio"] {
+        display: none;
+    }
+
+    .radio-option label {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.875rem 1.5rem;
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-weight: 500;
+        background: #ffffff;
+        color: #1a202c;
+    }
+
+    .radio-option input[type="radio"]:checked + label {
+        border-color: #667eea;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .radio-option label:hover {
+        border-color: #667eea;
+    }
+
+    .form-text {
+        font-size: 0.875rem;
+        color: #718096;
+        margin-top: 0.25rem;
+        display: block;
+    }
+
+    /* Responsive */
+    @media (max-width: 991px) {
+        .profile-sidebar {
+            position: static;
+            margin-bottom: 30px;
+        }
     }
 </style>
+
+<script>
+    // Phone number formatting - supports international formats
+    document.getElementById('phone').addEventListener('input', function(e) {
+        let value = e.target.value.replace(/\D/g, '');
+        
+        // If starts with country code (longer numbers), format as international
+        if (value.length > 10) {
+            // International format: +XX (XXX) XXX-XXXX or +XXX (XXX) XXX-XXXX
+            if (value.length <= 12) {
+                value = '+' + value.slice(0, value.length - 10) + ' (' + value.slice(value.length - 10, value.length - 7) + ') ' + value.slice(value.length - 7, value.length - 4) + '-' + value.slice(value.length - 4);
+            } else {
+                // Very long numbers (like +60 11 535 9091)
+                value = '+' + value.slice(0, value.length - 9) + ' (' + value.slice(value.length - 9, value.length - 6) + ') ' + value.slice(value.length - 6, value.length - 3) + '-' + value.slice(value.length - 3);
+            }
+        } else if (value.length > 0) {
+            // Local format for shorter numbers
+            if (value.length <= 3) {
+                value = value;
+            } else if (value.length <= 6) {
+                value = value.slice(0, 3) + '-' + value.slice(3);
+            } else if (value.length <= 10) {
+                value = '(' + value.slice(0, 3) + ') ' + value.slice(3, 6) + '-' + value.slice(6);
+            }
+        }
+        e.target.value = value;
+    });
+</script>

@@ -1,992 +1,1326 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-md-12">
-            <!-- Chat Header -->
-            <div class="chat-header">
-                <div class="row align-items-center">
-                    <div class="col-1">
-                        <a href="{{ route('chat.index') }}" class="btn btn-link">
-                            <i class="fas fa-arrow-left"></i>
-                        </a>
-                    </div>
-                    <div class="col-2">
-                        <img src="{{ $otherUser->info->getPicture() }}" 
-                             alt="{{ $otherUser->info->name }}"
-                             class="chat-header-avatar">
-                    </div>
-                    <div class="col-9">
-                        <h4 class="mb-0">{{ $otherUser->info->name }} {{ $otherUser->info->surname }}</h4>
-                        <small class="text-muted">{{ $otherUser->info->age }} years old</small>
-                    </div>
+<div class="messenger-container">
+    <!-- Main Chat Area -->
+    <div class="messenger-main">
+        <!-- Chat Header -->
+        <div class="messenger-header">
+            <div class="header-left">
+                <a href="{{ route('chat.index') }}" class="back-icon">
+                    <i class="fas fa-arrow-left"></i>
+                </a>
+                <div class="user-avatar-wrapper">
+                    <img src="{{ $otherUser->info->getPicture() }}" 
+                         alt="{{ $otherUser->info->name }}"
+                         class="user-avatar">
+                    @if($otherUser->isOnline())
+                        <span class="status-indicator online"></span>
+                    @else
+                        <span class="status-indicator offline"></span>
+                    @endif
+                </div>
+                <div class="user-details">
+                    <h3 class="user-name">{{ $otherUser->info->name }} {{ $otherUser->info->surname }}</h3>
+                    <span class="user-status">
+                        @if($otherUser->isOnline())
+                            Active now
+                        @else
+                            {{ $otherUser->last_seen_at ? 'Active ' . $otherUser->last_seen_at->diffForHumans() : 'Offline' }}
+                        @endif
+                    </span>
                 </div>
             </div>
+            <div class="header-right">
+                <button class="header-icon-btn" onclick="startVoiceCall()" title="Voice call">
+                    <i class="fas fa-phone"></i>
+                </button>
+                <button class="header-icon-btn" onclick="startVideoCall()" title="Video call">
+                    <i class="fas fa-video"></i>
+                </button>
+                <button class="header-icon-btn" onclick="toggleSidebar()" title="Chat info">
+                    <i class="fas fa-info-circle"></i>
+                </button>
+            </div>
+        </div>
 
-            <!-- Chat Messages -->
-           <div class="chat-messages" id="chatMessages">
-    @foreach($chat->messages as $message)
-        <div class="message {{ $message->sender_id == $user->id ? 'message-sent' : 'message-received' }}"
-             data-message-id="{{ $message->id }}">
-            @if($message->message_type === 'voice')
-                <!-- Voice Message Display -->
-                <div class="message-content voice-message-content">
-                    <div class="voice-player">
-                        <button class="voice-play-btn" onclick="toggleAudio(this, '{{ asset('storage/' . $message->message) }}')">
-                            <i class="fas fa-play"></i>
-                        </button>
-                        <div class="voice-waveform">
-                            <div class="voice-duration">Voice Message</div>
-                            <audio preload="metadata" style="display: none;">
-                                <source src="{{ asset('storage/' . $message->message) }}" type="audio/wav">
-                            </audio>
+        <!-- Chat Messages -->
+        <div class="messenger-messages" id="chatMessages">
+            @foreach($chat->messages as $message)
+                <div class="message-wrapper {{ $message->sender_id == $user->id ? 'message-sent' : 'message-received' }}"
+                     data-message-id="{{ $message->id }}">
+                    @if($message->message_type === 'voice')
+                        <div class="message-bubble voice-message">
+                            <div class="voice-player">
+                                <button class="voice-play-btn" onclick="toggleAudio(this, '{{ asset('storage/' . $message->message) }}')">
+                                    <i class="fas fa-play"></i>
+                                </button>
+                                <div class="voice-waveform">
+                                    <div class="voice-duration">Voice message</div>
+                                </div>
+                            </div>
+                            <div class="message-time">{{ $message->formatted_time }}</div>
                         </div>
-                    </div>
-                    <small class="message-time">{{ $message->formatted_time }}</small>
+                    @else
+                        <div class="message-bubble">
+                            @if($message->media_type)
+                                <div class="message-media">
+                                    @if($message->media_type === 'image')
+                                        <img src="{{ asset('storage/' . $message->media_path) }}" 
+                                             alt="Image" 
+                                             class="message-image"
+                                             onclick="openMediaModal('{{ asset('storage/' . $message->media_path) }}', 'image')">
+                                    @elseif($message->media_type === 'video')
+                                        <video controls class="message-video">
+                                            <source src="{{ asset('storage/' . $message->media_path) }}" type="video/mp4">
+                                        </video>
+                                    @endif
+                                </div>
+                            @endif
+                            
+                            @if($message->message)
+                                <div class="message-text">{{ $message->message }}</div>
+                            @endif
+                            
+                            <div class="message-footer">
+                                <span class="message-time">{{ $message->formatted_time }}</span>
+                                @if($message->sender_id == $user->id)
+                                    <i class="fas fa-check{{ $message->is_read ? '-double' : '' }} read-status"></i>
+                                @endif
+                            </div>
+                            
+                            @if($message->reactions->count() > 0)
+                                <div class="message-reactions">
+                                    @foreach($message->reactions->groupBy('reaction') as $reaction => $reactions)
+                                        <span class="reaction-item">{{ $reaction }} {{ $reactions->count() }}</span>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+                    @endif
                 </div>
-            @else
-                <!-- Text Message Display -->
-                <div class="message-content">
-                    <p>{{ $message->message }}</p>
-                    <small class="message-time">{{ $message->formatted_time }}</small>
+            @endforeach
+            
+            <!-- Typing Indicator -->
+            <div class="typing-indicator" id="typingIndicator" style="display: none;">
+                <div class="typing-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
                 </div>
-            @endif
+            </div>
         </div>
-    @endforeach
+
+        <!-- Message Input -->
+        <div class="messenger-input-area">
+            <div class="reply-preview" id="replyPreview" style="display: none;">
+                <div class="reply-content">
+                    <i class="fas fa-reply"></i>
+                    <div class="reply-info">
+                        <strong id="replyPreviewSender"></strong>
+                        <span id="replyPreviewText"></span>
+                    </div>
+                    <button class="reply-close" onclick="cancelReply()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            
+                <form id="messageForm" onsubmit="event.preventDefault(); sendMessage();">
+                <input type="hidden" id="replyToId" name="reply_to_id">
+                <div class="input-container">
+                    <button type="button" class="input-icon-btn" id="emojiBtn" title="Emoji">
+                        <i class="far fa-smile"></i>
+                    </button>
+                    <label for="mediaUpload" class="input-icon-btn media-upload-label" title="Attach file">
+                        <i class="fas fa-plus"></i>
+                        <input type="file" id="mediaUpload" accept="image/*,video/*" style="display: none; position: absolute; width: 0; height: 0; opacity: 0;" onchange="handleMediaUpload(event)">
+                    </label>
+                    <div class="input-wrapper">
+                        <input type="text" 
+                               id="messageInput" 
+                               class="message-input" 
+                               placeholder="Aa" 
+                               maxlength="1000"
+                               autocomplete="off">
+                    </div>
+                    <button type="button" 
+                            id="voiceMessageButton" 
+                            class="input-icon-btn voice-btn"
+                            title="Record voice">
+                        <i class="fas fa-microphone"></i>
+                    </button>
+                    <button type="submit" class="input-icon-btn send-btn" id="sendBtn" title="Send">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Sidebar (Media Gallery & Search) -->
+    <div class="messenger-sidebar" id="messengerSidebar">
+        <div class="sidebar-header">
+            <h3>Chat Info</h3>
+            <button class="sidebar-close" onclick="toggleSidebar()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="sidebar-tabs">
+            <button class="tab-btn active" onclick="switchTab('media')">
+                <i class="fas fa-images"></i> Media
+            </button>
+            <button class="tab-btn" onclick="switchTab('search')">
+                <i class="fas fa-search"></i> Search
+            </button>
+        </div>
+        
+        <div class="sidebar-content">
+            <!-- Media Tab -->
+            <div class="tab-panel active" id="mediaTab">
+                <div class="media-grid" id="mediaGrid">
+                    @foreach($chat->messages->where('media_type', '!=', null) as $mediaMessage)
+                        <div class="media-item" onclick="openMediaModal('{{ asset('storage/' . $mediaMessage->media_path) }}', '{{ $mediaMessage->media_type }}')">
+                            @if($mediaMessage->media_type === 'image')
+                                <img src="{{ asset('storage/' . $mediaMessage->media_path) }}" alt="Media">
+                            @elseif($mediaMessage->media_type === 'video')
+                                <div class="video-thumbnail">
+                                    <i class="fas fa-play"></i>
+                                </div>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+            
+            <!-- Search Tab -->
+            <div class="tab-panel" id="searchTab">
+                <div class="search-container">
+                    <input type="text" 
+                           id="messageSearchInput" 
+                           class="search-input" 
+                           placeholder="Search messages...">
+                    <div class="search-results" id="searchResults"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 </div>
 
-            <!-- Message Input -->
-<!-- Replace your existing chat-input div with this updated version -->
-<div class="chat-input">
-    <form id="messageForm" class="d-flex">
-        @csrf
-        <button type="button" 
-                id="voiceButton" 
-                class="btn btn-outline-secondary voice-btn"
-                title="Speech to text">
-            <i class="fas fa-microphone"></i>
+<!-- Emoji Picker -->
+<div class="emoji-picker" id="emojiPicker">
+    <div class="emoji-picker-header">
+        <span>Emoji</span>
+        <button class="emoji-close" onclick="toggleEmojiPicker()">
+            <i class="fas fa-times"></i>
         </button>
-        <button type="button" 
-                id="voiceMessageButton" 
-                class="btn btn-outline-primary voice-message-btn"
-                title="Send voice message">
-            <i class="fas fa-microphone-alt"></i>
-        </button>
-        <input type="text" 
-               id="messageInput" 
-               class="form-control" 
-               placeholder="Type, speak to text, or record voice message..." 
-               maxlength="1000"
-               required>
-        <button type="submit" class="btn btn-primary ml-2">
-            <i class="fas fa-paper-plane"></i>
-        </button>
-    </form>
-</div>
-        </div>
+    </div>
+    <div class="emoji-grid">
+        @php
+            $emojis = ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🤩', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️', '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗', '🤔', '🤭', '🤫', '🤥', '😶', '😐', '😑', '😬', '🙄', '😯', '😦', '😧', '😮', '😲', '🥱', '😴', '🤤', '😪', '😵', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠', '😈', '👿', '👹', '👺', '🤡', '💩', '👻', '💀', '☠️', '👽', '👾', '🤖', '🎃', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾'];
+        @endphp
+        @foreach($emojis as $emoji)
+            <span class="emoji-item" onclick="insertEmoji('{{ $emoji }}')">{{ $emoji }}</span>
+        @endforeach
     </div>
 </div>
 
+<!-- Media Modal -->
+<div class="media-modal" id="mediaModal" onclick="closeMediaModal()">
+    <span class="media-close">&times;</span>
+    <img class="media-modal-content" id="mediaModalImg">
+    <video class="media-modal-content" id="mediaModalVideo" controls></video>
+</div>
+
 <style>
-    .container-fluid {
-        height: 100vh;
-        display: flex;
-        flex-direction: column;
-    }
+* {
+    box-sizing: border-box;
+}
 
-    .chat-header {
-        background: #f8f9fa;
-        border-bottom: 1px solid #e0e0e0;
-        padding: 15px 20px;
-        flex-shrink: 0;
-    }
-
-    .chat-header-avatar {
-        width: 50px;
-        height: 50px;
-        border-radius: 50%;
-        object-fit: cover;
-    }
-
-    .chat-messages {
-        flex: 1;
-        overflow-y: auto;
-        padding: 20px;
-        background: #f5f5f5;
-        max-height: 70vh;
-    }
-
-    .message {
-        margin-bottom: 15px;
-        display: flex;
-    }
-
-    .message-sent {
-        justify-content: flex-end;
-    }
-
-    .message-received {
-        justify-content: flex-start;
-    }
-
-    .message-content {
-        max-width: 70%;
-        padding: 10px 15px;
-        border-radius: 18px;
-        position: relative;
-    }
-
-    .message-sent .message-content {
-        background: #007bff;
-        color: white;
-    }
-
-    .message-received .message-content {
-        background: white;
-        color: #333;
-        border: 1px solid #e0e0e0;
-    }
-
-    .message-time {
-        font-size: 11px;
-        opacity: 0.7;
-        display: block;
-        margin-top: 5px;
-    }
-
-    .chat-input {
-        padding: 15px 20px;
-        background: white;
-        border-top: 1px solid #e0e0e0;
-        flex-shrink: 0;
-    }
-
-    .chat-input .form-control {
-        border-radius: 25px;
-        padding: 12px 20px;
-    }
-
-    .chat-input .btn {
-        border-radius: 50%;
-        width: 45px;
-        height: 45px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    /* Scrollbar styling */
-    .chat-messages::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    .chat-messages::-webkit-scrollbar-track {
-        background: #f1f1f1;
-    }
-
-    .chat-messages::-webkit-scrollbar-thumb {
-        background: #c1c1c1;
-        border-radius: 3px;
-    }
-
-    .chat-messages::-webkit-scrollbar-thumb:hover {
-        background: #a8a8a8;
-    }
-   .voice-btn, .voice-message-btn {
-    border-radius: 50%;
-    width: 45px;
-    height: 45px;
+.messenger-container {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-right: 10px;
-    transition: all 0.3s ease;
-    border: 2px solid #6c757d;
-    background-color: white;
+    height: calc(100vh - 60px);
+    background: #f0f2f5;
+    position: relative;
 }
 
-.voice-btn:hover {
-    background-color: #f8f9fa;
-    transform: scale(1.05);
-}
-
-.voice-message-btn {
-    border-color: #007bff;
-}
-
-.voice-message-btn:hover {
-    background-color: #e7f1ff;
-    transform: scale(1.05);
-}
-
-.voice-btn.listening {
-    background-color: #dc3545;
-    border-color: #dc3545;
-    color: white;
-    animation: pulse 1.5s infinite;
-}
-
-.voice-message-btn.recording {
-    background-color: #dc3545;
-    border-color: #dc3545;
-    color: white;
-    animation: pulse-recording 1s infinite;
-}
-
-@keyframes pulse {
-    0% {
-        box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
-    }
-    70% {
-        box-shadow: 0 0 0 10px rgba(220, 53, 69, 0);
-    }
-    100% {
-        box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);
-    }
-}
-
-@keyframes pulse-recording {
-    0% {
-        box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.9);
-        opacity: 1;
-    }
-    50% {
-        box-shadow: 0 0 0 8px rgba(220, 53, 69, 0);
-        opacity: 0.8;
-    }
-    100% {
-        box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);
-        opacity: 1;
-    }
-}
-
-/* Update chat input form styling */
-.chat-input form {
-    align-items: center;
-}
-
-.chat-input .form-control {
+.messenger-main {
     flex: 1;
-    margin: 0;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    position: relative;
 }
 
-/* Voice recognition indicator */
-.voice-btn .fa-microphone-slash {
-    animation: shake 0.5s infinite;
-}
-
-@keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-2px); }
-    75% { transform: translateX(2px); }
-}
-
-/* Voice message styling */
-.voice-message {
-    background: #e3f2fd;
-    border: 1px solid #2196f3;
-    border-radius: 18px;
-    padding: 10px 15px;
+/* Header */
+.messenger-header {
     display: flex;
     align-items: center;
-    gap: 10px;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: #ffffff;
+    border-bottom: 1px solid #e4e6eb;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    z-index: 10;
 }
 
-.voice-message audio {
-    max-width: 200px;
-    height: 30px;
-}
-
-.voice-message .voice-duration {
-    font-size: 12px;
-    color: #666;
-}
-
-/* Responsive adjustments */
-@media (max-width: 576px) {
-    .voice-btn, .voice-message-btn {
-        width: 40px;
-        height: 40px;
-        margin-right: 5px;
-    }
-    
-    .chat-input .btn {
-        width: 40px;
-        height: 40px;
-    }
-}
-.voice-message-content {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-    color: white !important;
-    border: none !important;
-    min-width: 200px;
-}
-
-.message-received .voice-message-content {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important;
-}
-
-.voice-player {
+.header-left {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 5px 0;
+    flex: 1;
 }
 
-.voice-play-btn {
-    background: rgba(255, 255, 255, 0.2);
-    border: 2px solid rgba(255, 255, 255, 0.3);
+.back-icon {
+    color: #65676b;
+    font-size: 1.2rem;
+    padding: 8px;
     border-radius: 50%;
+    transition: background 0.2s;
+}
+
+.back-icon:hover {
+    background: #f0f2f5;
+    text-decoration: none;
+    color: #65676b;
+}
+
+.user-avatar-wrapper {
+    position: relative;
+}
+
+.user-avatar {
     width: 40px;
     height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.status-indicator {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 12px;
+    height: 12px;
+    border: 2px solid white;
+    border-radius: 50%;
+}
+
+.status-indicator.online {
+    background: #31a24c;
+}
+
+.status-indicator.offline {
+    background: #bcc0c4;
+}
+
+.user-details {
+    flex: 1;
+}
+
+.user-name {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #050505;
+    margin: 0;
+    line-height: 1.3333;
+}
+
+.user-status {
+    font-size: 0.8125rem;
+    color: #65676b;
+}
+
+.header-right {
+    display: flex;
+    gap: 4px;
+}
+
+.header-icon-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: #65676b;
+    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: background 0.2s;
+}
+
+.header-icon-btn:hover {
+    background: #f0f2f5;
+}
+
+/* Messages */
+.messenger-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    background: #f0f2f5;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.message-wrapper {
+    display: flex;
+    width: 100%;
+}
+
+.message-sent {
+    justify-content: flex-end;
+}
+
+.message-received {
+    justify-content: flex-start;
+}
+
+.message-bubble {
+    max-width: 65%;
+    padding: 8px 12px;
+    border-radius: 18px;
+    position: relative;
+    word-wrap: break-word;
+}
+
+.message-sent .message-bubble {
+    background: #0084ff;
     color: white;
+    border-bottom-right-radius: 4px;
+}
+
+.message-received .message-bubble {
+    background: #e4e6eb;
+    color: #050505;
+    border-bottom-left-radius: 4px;
+}
+
+.message-text {
+    font-size: 0.9375rem;
+    line-height: 1.3333;
+    margin: 0;
+}
+
+.message-media {
+    margin: -8px -12px 8px -12px;
+    border-radius: 18px 18px 0 0;
+    overflow: hidden;
+}
+
+.message-image {
+    max-width: 300px;
+    max-height: 300px;
+    width: 100%;
+    height: auto;
+    display: block;
     cursor: pointer;
-    transition: all 0.3s ease;
-    font-size: 14px;
 }
 
-.voice-play-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
-    transform: scale(1.1);
+.message-video {
+    max-width: 300px;
+    max-height: 300px;
+    width: 100%;
+    display: block;
 }
 
-.voice-play-btn.playing {
-    background: rgba(255, 255, 255, 0.4);
+.message-footer {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+    justify-content: flex-end;
+}
+
+.message-time {
+    font-size: 0.6875rem;
+    opacity: 0.7;
+}
+
+.read-status {
+    font-size: 0.75rem;
+    opacity: 0.7;
+}
+
+.message-reactions {
+    margin-top: 4px;
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.reaction-item {
+    background: white;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    border: 1px solid #e4e6eb;
+}
+
+.voice-message {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+}
+
+.voice-play-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0,0,0,0.1);
+    color: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .voice-waveform {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
 }
 
 .voice-duration {
-    font-size: 12px;
-    opacity: 0.9;
-    font-weight: 500;
+    font-size: 0.875rem;
 }
 
-.voice-progress {
-    height: 3px;
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 2px;
-    overflow: hidden;
+.typing-indicator {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
 }
 
-.voice-progress-bar {
-    height: 100%;
+.typing-dots {
+    display: flex;
+    gap: 4px;
+}
+
+.typing-dots span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #65676b;
+    animation: typing 1.4s infinite;
+}
+
+.typing-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.typing-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes typing {
+    0%, 60%, 100% {
+        transform: translateY(0);
+    }
+    30% {
+        transform: translateY(-10px);
+    }
+}
+
+/* Input Area */
+.messenger-input-area {
     background: white;
-    width: 0%;
-    transition: width 0.1s ease;
-    border-radius: 2px;
+    border-top: 1px solid #e4e6eb;
+    padding: 8px;
 }
 
-/* Hide file path display completely */
-.voice-message-content p {
-    display: none !important;
+.reply-preview {
+    padding: 8px 12px;
+    background: #f0f2f5;
+    border-bottom: 1px solid #e4e6eb;
 }
 
-/* Animation for voice message */
-@keyframes voice-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
+.reply-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.voice-play-btn.playing {
-    animation: voice-pulse 1s infinite;
+.reply-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    font-size: 0.8125rem;
 }
 
+.reply-close {
+    background: none;
+    border: none;
+    color: #65676b;
+    cursor: pointer;
+    padding: 4px;
+}
+
+.input-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    min-height: 52px;
+}
+
+.input-container .input-icon-btn,
+.input-container .media-upload-label {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    cursor: pointer;
+}
+
+.media-upload-label {
+    position: relative;
+}
+
+.media-upload-label input[type="file"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.input-icon-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: #0084ff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    padding: 0;
+}
+
+.input-icon-btn:hover {
+    background: #f0f2f5;
+}
+
+.input-wrapper {
+    flex: 1;
+    background: #f0f2f5;
+    border-radius: 20px;
+    padding: 8px 12px;
+}
+
+.message-input {
+    width: 100%;
+    border: none;
+    background: transparent;
+    font-size: 0.9375rem;
+    color: #050505;
+    outline: none;
+}
+
+.message-input::placeholder {
+    color: #8a8d91;
+}
+
+.send-btn {
+    color: #0084ff;
+}
+
+.voice-btn.recording {
+    color: #f02849;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+/* Sidebar */
+.messenger-sidebar {
+    width: 360px;
+    background: white;
+    border-left: 1px solid #e4e6eb;
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    right: -360px;
+    top: 60px;
+    height: calc(100vh - 60px);
+    transition: right 0.3s ease;
+    z-index: 1000;
+    box-shadow: -2px 0 8px rgba(0,0,0,0.1);
+}
+
+.messenger-sidebar.open {
+    right: 0;
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    border-bottom: 1px solid #e4e6eb;
+}
+
+.sidebar-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #050505;
+}
+
+.sidebar-close {
+    background: none;
+    border: none;
+    color: #65676b;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+}
+
+.sidebar-close:hover {
+    background: #f0f2f5;
+}
+
+.sidebar-tabs {
+    display: flex;
+    border-bottom: 1px solid #e4e6eb;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    background: transparent;
+    color: #65676b;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+}
+
+.tab-btn.active {
+    color: #0084ff;
+    border-bottom-color: #0084ff;
+}
+
+.sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+.tab-panel {
+    display: none;
+}
+
+.tab-panel.active {
+    display: block;
+}
+
+.media-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+}
+
+.media-item {
+    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.media-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.video-thumbnail {
+    width: 100%;
+    height: 100%;
+    background: #f0f2f5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #65676b;
+}
+
+.search-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.search-input {
+    padding: 12px;
+    border: 1px solid #e4e6eb;
+    border-radius: 20px;
+    font-size: 0.9375rem;
+    outline: none;
+}
+
+.search-results {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.search-result-item {
+    padding: 12px;
+    background: #f0f2f5;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.search-result-item:hover {
+    background: #e4e6eb;
+}
+
+.search-result-sender {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #0084ff;
+    margin-bottom: 4px;
+}
+
+.search-result-text {
+    font-size: 0.9375rem;
+    color: #050505;
+    margin-bottom: 4px;
+}
+
+.search-result-time {
+    font-size: 0.6875rem;
+    color: #65676b;
+}
+
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 60px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 999;
+}
+
+.sidebar-overlay.show {
+    display: block;
+}
+
+/* Emoji Picker */
+.emoji-picker {
+    position: absolute;
+    bottom: 60px;
+    left: 8px;
+    width: 320px;
+    height: 300px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    display: none;
+    flex-direction: column;
+    z-index: 1000;
+}
+
+.emoji-picker.show {
+    display: flex;
+}
+
+.emoji-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px;
+    border-bottom: 1px solid #e4e6eb;
+}
+
+.emoji-close {
+    background: none;
+    border: none;
+    color: #65676b;
+    cursor: pointer;
+}
+
+.emoji-grid {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 8px;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+    max-width: 100%;
+}
+
+.emoji-item {
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 4px;
+    text-align: center;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.emoji-item:hover {
+    background: #f0f2f5;
+}
+
+/* Media Modal */
+.media-modal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.9);
+    cursor: pointer;
+}
+
+.media-modal.show {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.media-modal-content {
+    max-width: 90%;
+    max-height: 90%;
+    object-fit: contain;
+}
+
+.media-close {
+    position: absolute;
+    top: 20px;
+    right: 40px;
+    color: white;
+    font-size: 40px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+/* Scrollbar */
+.messenger-messages::-webkit-scrollbar,
+.sidebar-content::-webkit-scrollbar,
+.emoji-grid::-webkit-scrollbar {
+    width: 8px;
+}
+
+.messenger-messages::-webkit-scrollbar-track,
+.sidebar-content::-webkit-scrollbar-track,
+.emoji-grid::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.messenger-messages::-webkit-scrollbar-thumb,
+.sidebar-content::-webkit-scrollbar-thumb,
+.emoji-grid::-webkit-scrollbar-thumb {
+    background: #bcc0c4;
+    border-radius: 4px;
+}
+
+.messenger-messages::-webkit-scrollbar-thumb:hover,
+.sidebar-content::-webkit-scrollbar-thumb:hover,
+.emoji-grid::-webkit-scrollbar-thumb:hover {
+    background: #8a8d91;
+}
+
+@media (max-width: 768px) {
+    .messenger-sidebar {
+        width: 100%;
+        right: -100%;
+    }
+}
 </style>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const chatMessages = document.getElementById('chatMessages');
-    const messageForm = document.getElementById('messageForm');
-    const messageInput = document.getElementById('messageInput');
-    const chatId = {{ $chat->id }};
-    let lastMessageId = {{ $chat->messages->last()->id ?? 0 }};
+const chatId = {{ $chat->id }};
+let lastMessageId = {{ $chat->messages->last()->id ?? 0 }};
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecordingVoice = false;
 
-    // Scroll to bottom
-    function scrollToBottom() {
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+// Form submission
+document.getElementById('sendBtn')?.addEventListener('click', function() {
+    sendMessage();
+});
+
+document.getElementById('messageInput')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
     }
+});
 
-    // Add message to chat
- function addMessage(message) {
-    const messageDiv = document.createElement('div');
-    const isSent = message.sender_id == {{ $user->id }};
+function sendMessage() {
+    const input = document.getElementById('messageInput');
+    const message = input.value.trim();
+    const replyToId = document.getElementById('replyToId')?.value;
     
-    messageDiv.className = `message ${isSent ? 'message-sent' : 'message-received'}`;
+    if (!message && !replyToId) return;
+    
+    const formData = new FormData();
+    formData.append('message', message);
+    formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
+    if (replyToId) formData.append('reply_to_id', replyToId);
+    
+    fetch(`/chat/${chatId}/send`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            addMessage(data.message);
+            input.value = '';
+            cancelReply();
+        }
+    })
+    .catch(error => console.error('Error:', error));
+}
+
+function addMessage(message) {
+    const messagesDiv = document.getElementById('chatMessages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message-wrapper ${message.sender_id == {{ $user->id }} ? 'message-sent' : 'message-received'}`;
     messageDiv.setAttribute('data-message-id', message.id);
     
-    let messageContent = '';
+    let content = '';
     if (message.message_type === 'voice') {
-        messageContent = `
-            <div class="message-content voice-message-content">
+        content = `
+            <div class="message-bubble voice-message">
                 <div class="voice-player">
                     <button class="voice-play-btn" onclick="toggleAudio(this, '${message.voice_url}')">
                         <i class="fas fa-play"></i>
                     </button>
                     <div class="voice-waveform">
-                        <div class="voice-duration">Voice Message</div>
+                        <div class="voice-duration">Voice message</div>
                     </div>
                 </div>
-                <audio preload="metadata" style="display: none;">
-                    <source src="${message.voice_url}" type="audio/wav">
-                </audio>
-                <small class="message-time">${message.formatted_time}</small>
+                <div class="message-time">${message.formatted_time}</div>
             </div>
         `;
     } else {
-        messageContent = `
-            <div class="message-content">
-                <p>${message.message}</p>
-                <small class="message-time">${message.formatted_time}</small>
+        let mediaHtml = '';
+        if (message.media_path) {
+            if (message.media_type === 'image') {
+                mediaHtml = `<div class="message-media"><img src="${message.media_path}" class="message-image"></div>`;
+            } else if (message.media_type === 'video') {
+                mediaHtml = `<div class="message-media"><video controls class="message-video"><source src="${message.media_path}"></video></div>`;
+            }
+        }
+        
+        content = `
+            <div class="message-bubble">
+                ${mediaHtml}
+                ${message.message ? `<div class="message-text">${message.message}</div>` : ''}
+                <div class="message-footer">
+                    <span class="message-time">${message.formatted_time}</span>
+                    ${message.sender_id == {{ $user->id }} ? '<i class="fas fa-check read-status"></i>' : ''}
+                </div>
             </div>
         `;
     }
     
-    messageDiv.innerHTML = messageContent;
-    const chatMessages = document.getElementById('chatMessages');
-    chatMessages.appendChild(messageDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-    
-    // Update lastMessageId if it exists in your scope
-    if (typeof lastMessageId !== 'undefined') {
-        lastMessageId = Math.max(lastMessageId, message.id);
-    }
+    messageDiv.innerHTML = content;
+    messagesDiv.appendChild(messageDiv);
+    scrollToBottom();
 }
-    // Send message
-    messageForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        const message = messageInput.value.trim();
-        if (!message) return;
 
-        // Disable input while sending
-        messageInput.disabled = true;
-        
-        fetch(`/chat/${chatId}/send`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-            },
-            body: JSON.stringify({ message: message })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                addMessage(data.message);
-                messageInput.value = '';
-            } else {
-                alert('Failed to send message');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Failed to send message');
-        })
-        .finally(() => {
-            messageInput.disabled = false;
-            messageInput.focus();
-        });
-    });
+function scrollToBottom() {
+    const messages = document.getElementById('chatMessages');
+    messages.scrollTop = messages.scrollHeight;
+}
 
-    // Poll for new messages
-    function pollMessages() {
-        fetch(`/chat/${chatId}/messages/${lastMessageId}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.messages && data.messages.length > 0) {
-                    data.messages.forEach(message => {
-                        addMessage(message);
-                    });
-                }
-            })
-            .catch(error => console.error('Polling error:', error));
-    }
+// Emoji Picker
+function toggleEmojiPicker() {
+    const picker = document.getElementById('emojiPicker');
+    picker.classList.toggle('show');
+}
 
-    // Poll every 3 seconds
-    setInterval(pollMessages, 3000);
+document.getElementById('emojiBtn')?.addEventListener('click', toggleEmojiPicker);
 
-    // Initial scroll to bottom and focus
-    scrollToBottom();
-    messageInput.focus();
+function insertEmoji(emoji) {
+    const input = document.getElementById('messageInput');
+    input.value += emoji;
+    input.focus();
+}
 
-    // Enter key to send
-    messageInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            messageForm.dispatchEvent(new Event('submit'));
-        }
-    });
-});
+// Sidebar
+function toggleSidebar() {
+    const sidebar = document.getElementById('messengerSidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    sidebar.classList.toggle('open');
+    overlay.classList.toggle('show');
+}
 
-// Move chatId to global scope - add this at the top of your script section
-let chatId = {{ $chat->id }};
-
-// Voice recognition variables (keep these global)
-let recognition = null;
-let isListening = false;
-let mediaRecorder = null;
-let audioChunks = [];
-let isRecordingVoice = false;
-
-document.addEventListener('DOMContentLoaded', function() {
-    const chatMessages = document.getElementById('chatMessages');
-    const messageForm = document.getElementById('messageForm');
-    const messageInput = document.getElementById('messageInput');
-    // chatId is now available globally - remove this line: let chatId = {{ $chat->id }};
-    let lastMessageId = {{ $chat->messages->last()->id ?? 0 }};
-
-    // Scroll to bottom
-    function scrollToBottom() {
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    // Add message to chat - UPDATE this function to handle voice messages
-    function addMessage(message) {
-        const messageDiv = document.createElement('div');
-        const isSent = message.sender_id == {{ $user->id }};
-        
-        messageDiv.className = `message ${isSent ? 'message-sent' : 'message-received'}`;
-        messageDiv.setAttribute('data-message-id', message.id);
-        
-        let messageContent = '';
-        if (message.message_type === 'voice') {
-            messageContent = `
-                <div class="message-content voice-message">
-                    <div class="voice-message-content">
-                        <i class="fas fa-play-circle"></i>
-                        <audio controls>
-                            <source src="${message.voice_url}" type="audio/wav">
-                            Your browser does not support the audio element.
-                        </audio>
-                    </div>
-                    <small class="message-time">${message.formatted_time}</small>
-                </div>
-            `;
-        } else {
-            messageContent = `
-                <div class="message-content">
-                    <p>${message.message}</p>
-                    <small class="message-time">${message.formatted_time}</small>
-                </div>
-            `;
-        }
-        
-        messageDiv.innerHTML = messageContent;
-        chatMessages.appendChild(messageDiv);
-        scrollToBottom();
-        lastMessageId = Math.max(lastMessageId, message.id);
-    }
-
-    // Send message
-    messageForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        const message = messageInput.value.trim();
-        if (!message) return;
-
-        // Disable input while sending
-        messageInput.disabled = true;
-        
-        fetch(`/chat/${chatId}/send`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-            },
-            body: JSON.stringify({ message: message })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                addMessage(data.message);
-                messageInput.value = '';
-            } else {
-                alert('Failed to send message');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Failed to send message');
-        })
-        .finally(() => {
-            messageInput.disabled = false;
-            messageInput.focus();
-        });
-    });
-
-    // Poll for new messages - UPDATE to handle voice messages
-    function pollMessages() {
-        fetch(`/chat/${chatId}/messages/${lastMessageId}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.messages && data.messages.length > 0) {
-                    data.messages.forEach(message => {
-                        addMessage(message);
-                    });
-                }
-            })
-            .catch(error => console.error('Polling error:', error));
-    }
-
-    // Poll every 3 seconds
-    setInterval(pollMessages, 3000);
-
-    // Initial scroll to bottom and focus
-    scrollToBottom();
-    messageInput.focus();
-
-    // Enter key to send
-    messageInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            messageForm.dispatchEvent(new Event('submit'));
-        }
-    });
-
-    // Initialize speech recognition
-    initializeSpeechRecognition();
-    
-    // Add voice button event listener (speech-to-text)
-    const voiceButton = document.getElementById('voiceButton');
-    if (voiceButton) {
-        voiceButton.addEventListener('click', toggleVoiceRecognition);
-    }
-    
-    // Add voice message button event listener
-    const voiceMessageButton = document.getElementById('voiceMessageButton');
-    if (voiceMessageButton) {
-        voiceMessageButton.addEventListener('click', toggleVoiceRecording);
-    }
-    
-    // Stop listening when user starts typing
-    messageInput.addEventListener('input', function() {
-        if (isListening && recognition) {
-            recognition.stop();
-        }
-    });
-});
-
-// Initialize speech recognition if supported
-function initializeSpeechRecognition() {
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        recognition = new SpeechRecognition();
-        
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
-        recognition.maxAlternatives = 1;
-        
-        recognition.onstart = function() {
-            console.log('Speech recognition started');
-            isListening = true;
-            updateVoiceButton();
-        };
-        
-        recognition.onresult = function(event) {
-            let interimTranscript = '';
-            let finalTranscript = '';
-            
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                const transcript = event.results[i][0].transcript;
-                if (event.results[i].isFinal) {
-                    finalTranscript += transcript;
-                } else {
-                    interimTranscript += transcript;
-                }
-            }
-            
-            // Update input field with interim or final results
-            const messageInput = document.getElementById('messageInput');
-            messageInput.value = (finalTranscript + interimTranscript).trim();
-            
-            // Auto-stop after getting final result
-            if (finalTranscript && recognition) {
-                setTimeout(() => {
-                    if (recognition && isListening) {
-                        recognition.stop();
-                    }
-                }, 1000);
-            }
-        };
-        
-        recognition.onerror = function(event) {
-            console.error('Speech recognition error:', event.error);
-            isListening = false;
-            updateVoiceButton();
-            
-            if (event.error === 'not-allowed') {
-                alert('Microphone access denied. Please allow microphone access to use voice input.');
-            } else if (event.error === 'no-speech') {
-                console.log('No speech detected, but continuing...');
-            } else if (event.error === 'aborted') {
-                console.log('Speech recognition aborted');
-            } else {
-                alert('Speech recognition error: ' + event.error);
-            }
-        };
-        
-        recognition.onend = function() {
-            console.log('Speech recognition ended');
-            isListening = false;
-            updateVoiceButton();
-        };
+function switchTab(tab) {
+    document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(tab + 'Tab').classList.add('active');
+    if (event && event.target) {
+        event.target.closest('.tab-btn').classList.add('active');
     }
 }
 
-// Toggle voice recognition (speech-to-text)
-function toggleVoiceRecognition() {
-    if (!recognition) {
-        alert('Speech recognition is not supported in your browser.');
-        return;
+function scrollToMessage(messageId) {
+    const message = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (message) {
+        message.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        message.style.background = 'rgba(0, 132, 255, 0.1)';
+        setTimeout(() => {
+            message.style.background = '';
+        }, 2000);
     }
+}
+
+// Voice Call
+function startVoiceCall() {
+    alert('Voice call feature coming soon!');
+}
+
+// Video Call
+function startVideoCall() {
+    alert('Video call feature coming soon!');
+}
+
+// Media Upload
+function handleMediaUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
     
-    if (isListening) {
-        console.log('Stopping speech recognition...');
-        recognition.stop();
+    const formData = new FormData();
+    formData.append('media', file);
+    formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
+    formData.append('media_type', file.type.startsWith('image/') ? 'image' : 'video');
+    
+    fetch(`/chat/${chatId}/send`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            addMessage(data.message);
+        }
+    })
+    .catch(error => console.error('Error:', error));
+}
+
+// Voice Message
+document.getElementById('voiceMessageButton')?.addEventListener('click', function() {
+    if (!isRecordingVoice) {
+        startVoiceRecording();
     } else {
-        console.log('Starting speech recognition...');
-        try {
-            const messageInput = document.getElementById('messageInput');
-            messageInput.value = ''; // Clear input field
-            recognition.start();
-        } catch (error) {
-            console.error('Error starting speech recognition:', error);
-            alert('Error starting voice input. Please try again.');
-        }
+        stopVoiceRecording();
     }
-}
-
-// Voice message recording functions
-async function initializeVoiceRecording() {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
-        // Check what MIME types are supported
-        let mimeType = 'audio/wav';
-        if (MediaRecorder.isTypeSupported('audio/webm')) {
-            mimeType = 'audio/webm';
-        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-            mimeType = 'audio/mp4';
-        } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
-            mimeType = 'audio/ogg';
-        }
-        
-        console.log('Using MIME type:', mimeType);
-        mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
-        
-        mediaRecorder.ondataavailable = function(event) {
-            audioChunks.push(event.data);
-        };
-        
-        mediaRecorder.onstop = function() {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-            sendVoiceMessage(audioBlob);
-            audioChunks = [];
-            
-            // Stop all tracks to release microphone
-            stream.getTracks().forEach(track => track.stop());
-        };
-        
-        return true;
-    } catch (error) {
-        console.error('Error accessing microphone:', error);
-        alert('Error accessing microphone for voice messages.');
-        return false;
-    }
-}
+});
 
 function startVoiceRecording() {
-    if (isRecordingVoice) return;
-    
-    initializeVoiceRecording().then(success => {
-        if (success && mediaRecorder) {
-            isRecordingVoice = true;
+    navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+            mediaRecorder = new MediaRecorder(stream);
             audioChunks = [];
-            mediaRecorder.start();
-            updateVoiceMessageButton();
             
-            // Auto-stop after 30 seconds
-            setTimeout(() => {
-                if (isRecordingVoice) {
-                    stopVoiceRecording();
-                }
-            }, 30000);
-        }
-    });
+            mediaRecorder.ondataavailable = event => {
+                audioChunks.push(event.data);
+            };
+            
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                sendVoiceMessage(audioBlob);
+                stream.getTracks().forEach(track => track.stop());
+            };
+            
+            mediaRecorder.start();
+            isRecordingVoice = true;
+            this.classList.add('recording');
+        })
+        .catch(error => console.error('Error accessing microphone:', error));
 }
 
 function stopVoiceRecording() {
-    if (!isRecordingVoice || !mediaRecorder) return;
-    
-    isRecordingVoice = false;
-    mediaRecorder.stop();
-    updateVoiceMessageButton();
-}
-
-function toggleVoiceRecording() {
-    if (isRecordingVoice) {
-        stopVoiceRecording();
-    } else {
-        startVoiceRecording();
+    if (mediaRecorder && isRecordingVoice) {
+        mediaRecorder.stop();
+        isRecordingVoice = false;
+        document.getElementById('voiceMessageButton').classList.remove('recording');
     }
 }
 
-// FIXED: sendVoiceMessage function with proper error handling
-async function sendVoiceMessage(audioBlob) {
-    console.log('=== VOICE MESSAGE DEBUG START ===');
-    console.log('Audio blob size:', audioBlob.size);
-    console.log('Chat ID:', chatId);
-    
-    const csrfToken = document.querySelector('meta[name="csrf-token"]');
-    if (!csrfToken) {
-        alert('CSRF token not found. Please refresh the page.');
-        return;
-    }
-    
+function sendVoiceMessage(audioBlob) {
     const formData = new FormData();
-    formData.append('voice_message', audioBlob, 'voice_message.wav');
-    formData.append('_token', csrfToken.getAttribute('content'));
+    formData.append('voice_message', audioBlob, 'voice.wav');
+    formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
     
-    try {
-        const response = await fetch(`/chat/${chatId}/send-voice`, {
-            method: 'POST',
-            body: formData
-        });
+    fetch(`/chat/${chatId}/send-voice`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            addMessage(data.message);
+        }
+    })
+    .catch(error => console.error('Error:', error));
+}
+
+// Reply
+function cancelReply() {
+    document.getElementById('replyPreview').style.display = 'none';
+    document.getElementById('replyToId').value = '';
+}
+
+// Media Modal
+function openMediaModal(path, type) {
+    const modal = document.getElementById('mediaModal');
+    const img = document.getElementById('mediaModalImg');
+    const video = document.getElementById('mediaModalVideo');
+    
+    img.style.display = 'none';
+    video.style.display = 'none';
+    
+    if (type === 'image') {
+        img.src = path;
+        img.style.display = 'block';
+    } else {
+        video.src = path;
+        video.style.display = 'block';
+    }
+    
+    modal.classList.add('show');
+}
+
+function closeMediaModal() {
+    document.getElementById('mediaModal').classList.remove('show');
+}
+
+// Audio toggle
+function toggleAudio(btn, url) {
+    const audio = new Audio(url);
+    if (btn.querySelector('.fa-play')) {
+        audio.play();
+        btn.innerHTML = '<i class="fas fa-pause"></i>';
+        audio.onended = () => {
+            btn.innerHTML = '<i class="fas fa-play"></i>';
+        };
+    } else {
+        audio.pause();
+        btn.innerHTML = '<i class="fas fa-play"></i>';
+    }
+}
+
+// Message Search
+const searchInput = document.getElementById('messageSearchInput');
+if (searchInput) {
+    let searchTimeout;
+    searchInput.addEventListener('input', function(e) {
+        const query = e.target.value.trim();
+        const results = document.getElementById('searchResults');
         
-        const responseText = await response.text();
+        clearTimeout(searchTimeout);
         
-        if (responseText.trim().startsWith('<!doctype') || responseText.trim().startsWith('<!DOCTYPE')) {
-            console.error('Server returned HTML error page');
-            alert('Server Error. Check Laravel logs.');
+        if (query.length < 1) {
+            results.innerHTML = '';
             return;
         }
         
-        const data = JSON.parse(responseText);
-        
-        if (data.success) {
-            console.log('Success! Adding voice message to chat');
+        // Debounce search
+        searchTimeout = setTimeout(() => {
+            results.innerHTML = '<p style="text-align: center; color: #65676b; padding: 20px;">Searching...</p>';
             
-            // Create proper voice message display
-            const messageDiv = document.createElement('div');
-            const isSent = data.message.sender_id == {{ $user->id }};
+            const url = `/chat/${chatId}/search?query=${encodeURIComponent(query)}`;
+            console.log('Searching:', url);
             
-            messageDiv.className = `message ${isSent ? 'message-sent' : 'message-received'}`;
-            messageDiv.setAttribute('data-message-id', data.message.id);
-            
-            messageDiv.innerHTML = `
-                <div class="message-content voice-message-content">
-                    <div class="voice-player">
-                        <button class="voice-play-btn" onclick="toggleAudio(this, '${data.message.voice_url}')">
-                            <i class="fas fa-play"></i>
-                        </button>
-                        <div class="voice-waveform">
-                            <div class="voice-duration">Voice Message</div>
+            fetch(url, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin'
+            })
+            .then(response => {
+                console.log('Search response status:', response.status);
+                console.log('Search response headers:', response.headers);
+                
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        console.error('Search error response:', text);
+                        let errorMsg = 'Search failed';
+                        try {
+                            const errorData = JSON.parse(text);
+                            errorMsg = errorData.error || errorData.message || errorMsg;
+                        } catch (e) {
+                            errorMsg = text || errorMsg;
+                        }
+                        throw new Error(errorMsg);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Search results:', data);
+                
+                if (data.error) {
+                    results.innerHTML = `<p style="text-align: center; color: #f02849; padding: 20px;">${data.error}</p>`;
+                    return;
+                }
+                
+                if (data.messages && Array.isArray(data.messages) && data.messages.length > 0) {
+                    results.innerHTML = data.messages.map(msg => `
+                        <div class="search-result-item" onclick="scrollToMessage(${msg.id})">
+                            <div class="search-result-sender">${msg.sender_name || 'User'}</div>
+                            <div class="search-result-text">${msg.message || '(No text)'}</div>
+                            <div class="search-result-time">${msg.formatted_time || ''}</div>
                         </div>
-                    </div>
-                    <audio preload="metadata" style="display: none;">
-                        <source src="${data.message.voice_url}" type="audio/wav">
-                    </audio>
-                    <small class="message-time">${data.message.formatted_time}</small>
-                </div>
-            `;
-            
-            const chatMessages = document.getElementById('chatMessages');
-            chatMessages.appendChild(messageDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-            
-        } else {
-            console.error('Server returned error:', data);
-            alert('Failed to send voice message: ' + (data.error || 'Unknown error'));
-        }
-        
-    } catch (error) {
-        console.error('Error sending voice message:', error);
-        alert('Network error: ' + error.message);
-    }
+                    `).join('');
+                } else {
+                    results.innerHTML = '<p style="text-align: center; color: #65676b; padding: 20px;">No messages found</p>';
+                }
+            })
+            .catch(error => {
+                console.error('Search error:', error);
+                console.error('Error stack:', error.stack);
+                results.innerHTML = `<p style="text-align: center; color: #f02849; padding: 20px;">Error: ${error.message || 'Please try again'}</p>`;
+            });
+        }, 500);
+    });
 }
 
-// Update voice button appearance
-function updateVoiceButton() {
-    const voiceButton = document.getElementById('voiceButton');
-    if (voiceButton) {
-        if (isListening) {
-            voiceButton.innerHTML = '<i class="fas fa-microphone-slash text-danger"></i>';
-            voiceButton.classList.add('listening');
-        } else {
-            voiceButton.innerHTML = '<i class="fas fa-microphone"></i>';
-            voiceButton.classList.remove('listening');
-        }
-    }
-}
-
-// Update voice message button appearance
-function updateVoiceMessageButton() {
-    const voiceMessageButton = document.getElementById('voiceMessageButton');
-    if (voiceMessageButton) {
-        if (isRecordingVoice) {
-            voiceMessageButton.innerHTML = '<i class="fas fa-stop text-danger"></i>';
-            voiceMessageButton.classList.add('recording');
-        } else {
-            voiceMessageButton.innerHTML = '<i class="fas fa-microphone-alt"></i>';
-            voiceMessageButton.classList.remove('recording');
-        }
-    }
-}
-
-function toggleAudio(button, audioUrl) {
-    const icon = button.querySelector('i');
-    const messageDiv = button.closest('.message');
-    const audio = messageDiv.querySelector('audio');
-    
-    if (!audio.src) {
-        audio.src = audioUrl;
-    }
-    
-    if (audio.paused) {
-        // Stop any other playing audio
-        document.querySelectorAll('audio').forEach(a => {
-            if (!a.paused) {
-                a.pause();
-                a.currentTime = 0;
-            }
-        });
-        
-        // Reset all play buttons
-        document.querySelectorAll('.voice-play-btn').forEach(btn => {
-            btn.classList.remove('playing');
-            btn.querySelector('i').className = 'fas fa-play';
-        });
-        
-        // Play this audio
-        audio.play();
-        button.classList.add('playing');
-        icon.className = 'fas fa-pause';
-        
-        // Handle audio end
-        audio.onended = function() {
-            button.classList.remove('playing');
-            icon.className = 'fas fa-play';
-        };
-        
-    } else {
-        // Pause audio
-        audio.pause();
-        audio.currentTime = 0;
-        button.classList.remove('playing');
-        icon.className = 'fas fa-play';
-    }
-}
-
+// Initialize
+scrollToBottom();
 </script>
 @endsection
+

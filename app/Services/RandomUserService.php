@@ -7,49 +7,23 @@ use App\UserSettings;
 
 class RandomUserService
 {
+    private SmartMatchingService $smartMatchingService;
+
+    public function __construct(SmartMatchingService $smartMatchingService)
+    {
+        $this->smartMatchingService = $smartMatchingService;
+    }
+
     public function getUser($user, UserSettings $userSettings): ?User
     {
-        if ($userSettings->search_female == 1 && $userSettings->search_male == 1) {
-            return User::inRandomOrder()
-                ->searchWithSettings(
-                    $userSettings->search_age_from,
-                    $userSettings->search_age_to,
-                    'both',
-                    $userSettings->user_id,
-                    $userSettings->search_tag1,
-                    $userSettings->search_tag2,
-                    $userSettings->search_tag3
-                )
-                ->searchWithoutLikesAndDislikes($user->id)
-                ->first();
-        } elseif ($userSettings->search_female == 1) {
-            return User::inRandomOrder()
-                ->searchWithSettings(
-                    $userSettings->search_age_from,
-                    $userSettings->search_age_to,
-                    'female',
-                    $userSettings->user_id,
-                    $userSettings->search_tag1,
-                    $userSettings->search_tag2,
-                    $userSettings->search_tag3
-                )
-                ->searchWithoutLikesAndDislikes($user->id)
-                ->first();
-        } elseif ($userSettings->search_male == 1) {
-            return User::inRandomOrder()
-                ->searchWithSettings(
-                    $userSettings->search_age_from,
-                    $userSettings->search_age_to,
-                    'male',
-                    $userSettings->user_id,
-                    $userSettings->search_tag1,
-                    $userSettings->search_tag2,
-                    $userSettings->search_tag3
-                )
-                ->searchWithoutLikesAndDislikes($user->id)
-                ->first();
-        } else {
-            return null;
+        // Use smart matching instead of random
+        $matchedUser = $this->smartMatchingService->getBestMatch($user, $userSettings);
+        
+        if ($matchedUser) {
+            // Mark as shown to avoid repetition
+            $this->smartMatchingService->markAsShown($user->id, $matchedUser->id);
         }
+        
+        return $matchedUser;
     }
 }

@@ -165,13 +165,13 @@ return [
         /*
          * Package Service Providers...
          */
-        Hootlex\Friendships\FriendshipsServiceProvider::class,
+        // Hootlex\Friendships\FriendshipsServiceProvider::class, // Removed - package not compatible with PHP 8.3
         /*
          * Application Service Providers...
          */
         App\Providers\AppServiceProvider::class,
         App\Providers\AuthServiceProvider::class,
-        // App\Providers\BroadcastServiceProvider::class,
+        App\Providers\BroadcastServiceProvider::class,
         App\Providers\EventServiceProvider::class,
         App\Providers\RouteServiceProvider::class,
 

@@ -1,6 +1,18 @@
 #!/usr/bin/env php
 <?php
 
+// Suppress PHP 8.3 deprecation warnings for Laravel 7 compatibility
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_STRICT);
+
+// Set custom error handler to suppress deprecation notices
+set_error_handler(function ($errno, $errstr, $errfile, $errline) {
+    // Suppress deprecation warnings about return types
+    if ($errno === E_DEPRECATED && strpos($errstr, 'Return type') !== false) {
+        return true; // Suppress the error
+    }
+    return false; // Let other errors through
+}, E_ALL);
+
 define('LARAVEL_START', microtime(true));
 
 /*

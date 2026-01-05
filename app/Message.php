@@ -11,7 +11,11 @@ class Message extends Model
         'sender_id',
         'message',
         'message_type',
-        'is_read'
+        'is_read',
+        'reply_to_id',
+        'media_type',
+        'media_path',
+        'media_thumbnail'
     ];
 
     protected $casts = [
@@ -26,6 +30,21 @@ class Message extends Model
     public function sender()
     {
         return $this->belongsTo('App\User', 'sender_id');
+    }
+
+    public function replyTo()
+    {
+        return $this->belongsTo('App\Message', 'reply_to_id');
+    }
+
+    public function reactions()
+    {
+        return $this->hasMany('App\MessageReaction');
+    }
+
+    public function getReactionsCountAttribute()
+    {
+        return $this->reactions()->count();
     }
 
     // Format the message timestamp

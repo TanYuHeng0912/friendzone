@@ -14,7 +14,17 @@ class Post extends Model
         'user_id',
         'community_id',
         'likes_count',
-        'comments_count'
+        'comments_count',
+        'post_type',
+        'metadata',
+        'hashtags',
+        'mentions'
+    ];
+    
+    protected $casts = [
+        'metadata' => 'array',
+        'hashtags' => 'array',
+        'mentions' => 'array'
     ];
 
     public function user()
@@ -71,5 +81,34 @@ class Post extends Model
     {
         $count = $this->allComments()->count();
         $this->update(['comments_count' => $count]);
+    }
+    
+    public function poll()
+    {
+        return $this->hasOne('App\Poll');
+    }
+    
+    public function event()
+    {
+        return $this->hasOne('App\Event');
+    }
+    
+    public function extractHashtags()
+    {
+        preg_match_all('/#(\w+)/', $this->content, $matches);
+        return $matches[1] ?? [];
+    }
+    
+    public function extractMentions()
+    {
+        preg_match_all('/@(\w+)/', $this->content, $matches);
+        return $matches[1] ?? [];
+    }
+    
+    public function saveHashtagsAndMentions()
+    {
+        $this->hashtags = $this->extractHashtags();
+        $this->mentions = $this->extractMentions();
+        $this->save();
     }
 }

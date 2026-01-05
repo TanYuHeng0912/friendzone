@@ -30,6 +30,9 @@
                 <form action="{{ route('community.store-post', $community) }}" method="POST" enctype="multipart/form-data">
                     @csrf
                     
+                    <!-- Post type - default to 'text' for simple posts -->
+                    <input type="hidden" name="post_type" value="{{ old('post_type', 'text') }}" id="post_type">
+                    
                     <div class="form-group">
                         <label for="title" class="form-label">Post Title</label>
                         <input type="text" 

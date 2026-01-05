@@ -37,6 +37,9 @@ class LoginController extends Controller
      */
     protected function authenticated(Request $request, $user)
     {
+        // Update online status
+        $user->updateLastSeen();
+        
         // Check if user is admin and redirect accordingly
         if ($user->is_admin == 1) {
             return redirect()->route('admin.dashboard');

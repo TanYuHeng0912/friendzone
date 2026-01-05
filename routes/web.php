@@ -19,6 +19,7 @@ Route::get('/matches', 'MatchesController@matches')->name('matches');
 
 Route::get('/pictures', 'UserPicturesController@show')->name('pictures.show');
 Route::post('/pictures', 'UserPicturesController@addPictures')->name('pictures.add');
+Route::post('/pictures/reorder', 'UserPicturesController@reorderPictures')->name('pictures.reorder');
 Route::delete('/pictures/{id}', 'UserPicturesController@destroyPicture')->name('pictures.destroy');
 
 Route::get('/profile/edit', 'EditUserProfileController@show')->name('profile.showEditProfile');
@@ -31,6 +32,8 @@ Route::put('/profile/settings', 'EditUserProfileController@updateSettings')->nam
 Route::delete('/profile', 'EditUserProfileController@destroyProfile')->name('profile.destroy');
 Route::post('/profile/like/{id}', 'ReactionController@like')->name('like');
 Route::post('/profile/dislike/{id}', 'ReactionController@dislike')->name('dislike');
+Route::get('/profile/compatibility/{id}', 'ReactionController@getCompatibility')->name('compatibility');
+Route::get('/test-matches', 'TestMatchController@test')->name('test.matches')->middleware('auth');
 Route::get('/feedback', 'FeedbackController@create')->name('feedback.create');
 Route::post('/feedback', 'FeedbackController@store')->name('feedback.store');
 // Chat routes
@@ -51,6 +54,24 @@ Route::middleware('auth')->group(function () {
     Route::get('/chat/{chat}/messages/{lastMessageId?}', 'ChatController@getMessages')->name('chat.messages');
 
     Route::post('/chat/{chat}/send-voice', 'ChatController@sendVoiceMessage')->name('chat.sendVoice');
+    
+    // Typing indicator
+    Route::post('/chat/{chat}/typing', 'ChatController@setTyping')->name('chat.typing');
+    Route::get('/chat/{chat}/typing-status', 'ChatController@getTypingStatus')->name('chat.typingStatus');
+    
+    // Message reactions
+    Route::post('/chat/message/{message}/reaction', 'ChatController@addReaction')->name('chat.addReaction');
+    Route::delete('/chat/message/{message}/reaction/{reaction}', 'ChatController@removeReaction')->name('chat.removeReaction');
+    
+    // Reply to message
+    Route::post('/chat/{chat}/reply', 'ChatController@replyToMessage')->name('chat.reply');
+    
+    // Message search
+    Route::get('/chat/{chat}/search', 'ChatController@searchMessages')->name('chat.search');
+    
+    // Media gallery
+    Route::get('/chat/{chat}/media', 'ChatMediaController@index')->name('chat.media');
+    Route::get('/chat/{chat}/media/api', 'ChatMediaController@getMedia')->name('chat.media.api');
 });
 
 // Community routes
@@ -73,6 +94,35 @@ Route::middleware('auth')->group(function () {
     // Post interactions
     Route::post('/community/post/{post}/like', 'CommunityController@likePost')->name('community.like-post');
     Route::post('/community/post/{post}/comment', 'CommunityController@storeComment')->name('community.comment');
+    
+    // Poll voting
+    Route::post('/poll/{poll}/vote', 'PollController@vote')->name('poll.vote');
+    
+    // Event RSVP
+    Route::post('/event/{event}/rsvp', 'EventController@rsvp')->name('event.rsvp');
+    Route::delete('/event/{event}/rsvp', 'EventController@cancelRsvp')->name('event.cancel-rsvp');
+});
+
+// Friend routes
+Route::middleware('auth')->prefix('friends')->name('friends.')->group(function () {
+    Route::post('/request/{user}', 'FriendController@sendRequest')->name('request');
+    Route::post('/accept/{friendship}', 'FriendController@acceptRequest')->name('accept');
+    Route::post('/reject/{friendship}', 'FriendController@rejectRequest')->name('reject');
+    Route::delete('/remove/{friendship}', 'FriendController@removeFriend')->name('remove');
+    Route::get('/list', 'FriendController@getFriends')->name('list');
+    Route::get('/requests', 'FriendController@getPendingRequests')->name('requests');
+});
+
+// Activity feed routes
+Route::middleware('auth')->prefix('activity')->name('activity.')->group(function () {
+    Route::get('/', 'ActivityController@index')->name('index');
+    Route::get('/api', 'ActivityController@api')->name('api');
+});
+
+// Chat media routes
+Route::middleware('auth')->group(function () {
+    Route::post('/chat/{chat}/send-media', 'ChatController@sendMedia')->name('chat.send-media');
+    Route::get('/chat/{chat}/gif-search', 'ChatController@searchGifs')->name('chat.gif-search');
 });
 
 // Add these routes to your existing web.php file
