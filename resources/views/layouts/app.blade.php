@@ -60,10 +60,52 @@
     <link href="{{ asset('css/app.css') }}" rel="stylesheet">
     
     <!-- Laravel Echo & Pusher (for WebSocket support) -->
-    @if(config('broadcasting.default') === 'pusher' && env('PUSHER_APP_KEY'))
+    @php
+        // Read from config (which reads from .env)
+        // Note: env() doesn't work in Blade when config is cached, so we use config()
+        $broadcastDriver = config('broadcasting.default');
+        $pusherKey = config('broadcasting.connections.pusher.key');
+        $pusherCluster = config('broadcasting.connections.pusher.options.cluster', 'mt1');
+        $pusherHost = config('broadcasting.connections.pusher.options.host', '127.0.0.1');
+        $pusherPort = config('broadcasting.connections.pusher.options.port', 6001);
+        $pusherScheme = config('broadcasting.connections.pusher.options.scheme', 'http');
+        $shouldEnableWebSocket = ($broadcastDriver === 'pusher' && !empty($pusherKey));
+        
+        // Debug: Log to Laravel log file
+        \Log::info('WebSocket Config Check', [
+            'broadcastDriver' => $broadcastDriver,
+            'pusherKey' => $pusherKey ? 'SET' : 'NOT SET',
+            'shouldEnable' => $shouldEnableWebSocket
+        ]);
+    @endphp
+    @if($shouldEnableWebSocket)
+        <meta name="broadcast-driver" content="pusher">
+        <meta name="pusher-key" content="{{ $pusherKey }}">
+        <meta name="pusher-cluster" content="{{ $pusherCluster }}">
+        <meta name="pusher-host" content="{{ $pusherHost }}">
+        <meta name="pusher-port" content="{{ $pusherPort }}">
+        <meta name="pusher-scheme" content="{{ $pusherScheme }}">
         <script src="https://js.pusher.com/7.0/pusher.min.js"></script>
         <script>
             window.Pusher = Pusher;
+            // Also set as global variables for easy access
+            window.PUSHER_CONFIG = {
+                driver: 'pusher',
+                key: '{{ $pusherKey }}',
+                cluster: '{{ $pusherCluster }}',
+                host: '{{ $pusherHost }}',
+                port: {{ $pusherPort }},
+                scheme: '{{ $pusherScheme }}'
+            };
+            console.log('WebSocket: PUSHER_CONFIG initialized', window.PUSHER_CONFIG);
+        </script>
+    @else
+        <script>
+            console.warn('WebSocket: Configuration check failed', {
+                broadcastDriver: '{{ $broadcastDriver }}',
+                pusherKey: '{{ $pusherKey ? "SET" : "NOT SET" }}',
+                shouldEnable: {{ $shouldEnableWebSocket ? 'true' : 'false' }}
+            });
         </script>
     @endif
 </head>

@@ -51,7 +51,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/chat/{chat}/send', 'ChatController@sendMessage')->name('chat.send');
     
     // Get new messages (for AJAX polling)
-    Route::get('/chat/{chat}/messages/{lastMessageId?}', 'ChatController@getMessages')->name('chat.messages');
+    Route::get('/chat/{chat}/messages', 'ChatController@getMessages')->name('chat.messages');
 
     Route::post('/chat/{chat}/send-voice', 'ChatController@sendVoiceMessage')->name('chat.sendVoice');
     
@@ -72,6 +72,12 @@ Route::middleware('auth')->group(function () {
     // Media gallery
     Route::get('/chat/{chat}/media', 'ChatMediaController@index')->name('chat.media');
     Route::get('/chat/{chat}/media/api', 'ChatMediaController@getMedia')->name('chat.media.api');
+    
+    // Call routes
+    Route::post('/call/initiate', 'CallController@initiate')->name('call.initiate');
+    Route::post('/call/{callId}/answer', 'CallController@answer')->name('call.answer');
+    Route::post('/call/{callId}/end', 'CallController@end')->name('call.end');
+    Route::post('/call/{callId}/ice-candidate', 'CallController@iceCandidate')->name('call.ice-candidate');
 });
 
 // Community routes

@@ -55,8 +55,13 @@ class ChatController extends Controller
         $chat->markAsRead($user->id);
 
         $otherUser = $chat->getOtherUser($user->id);
+        
+        // Get call history for this chat
+        $calls = \App\Call::where('chat_id', $chatId)
+            ->orderBy('created_at', 'desc')
+            ->get();
 
-        return view('chat.show', compact('chat', 'user', 'otherUser'));
+        return view('chat.show', compact('chat', 'user', 'otherUser', 'calls'));
     }
 
     /**
@@ -173,7 +178,7 @@ class ChatController extends Controller
     /**
      * Get new messages for a chat (for AJAX polling)
      */
-    public function getMessages($chatId, $lastMessageId = 0): JsonResponse
+    public function getMessages(Request $request, $chatId): JsonResponse
     {
         $user = auth()->user();
         $chat = Chat::findOrFail($chatId);
@@ -182,9 +187,12 @@ class ChatController extends Controller
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
+        $lastMessageId = $request->query('after', 0);
+
         $messages = $chat->messages()
-            ->with('sender')
+            ->with(['sender.info', 'replyTo.sender.info', 'reactions'])
             ->where('id', '>', $lastMessageId)
+            ->orderBy('id', 'asc')
             ->get();
 
         // Mark new messages as read

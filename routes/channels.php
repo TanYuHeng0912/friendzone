@@ -26,3 +26,18 @@ Broadcast::channel('chat.{chatId}', function ($user, $chatId) {
     // Only allow users who are participants in the chat
     return $chat->hasUser($user->id);
 });
+
+// User channel for receiving calls
+Broadcast::channel('user.{userId}', function ($user, $userId) {
+    return (int) $user->id === (int) $userId;
+});
+
+// Call channel for WebRTC signaling
+Broadcast::channel('call.{callId}', function ($user, $callId) {
+    $call = \App\Call::find($callId);
+    if (!$call) {
+        return false;
+    }
+    // Only allow caller and receiver
+    return $call->caller_id === $user->id || $call->receiver_id === $user->id;
+});

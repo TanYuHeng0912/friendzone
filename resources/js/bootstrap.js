@@ -16,5 +16,9 @@ window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
  * allows your team to easily build robust real-time web applications.
  */
 
-// Laravel Echo will be initialized in the chat view if Pusher is configured
-// This allows for graceful fallback to polling if WebSocket is not available
+// Laravel Echo initialization for WebSocket support
+import Echo from 'laravel-echo';
+import Pusher from 'pusher-js';
+
+window.Pusher = Pusher;
+window.EchoClass = Echo; // Make Echo class available globally
