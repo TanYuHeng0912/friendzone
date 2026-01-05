@@ -1134,6 +1134,12 @@ function initializeWebSocket() {
                         encrypted: pusherScheme === 'https',
                         disableStats: true,
                         enabledTransports: ['ws', 'wss'],
+                        authEndpoint: '/broadcasting/auth',
+                        auth: {
+                            headers: {
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                            }
+                        },
                     });
                     console.log('WebSocket: Laravel Echo initialized');
                 } catch (error) {
@@ -1151,6 +1157,13 @@ function initializeWebSocket() {
             try {
                 console.log('WebSocket: Connecting to chat channel...');
                 const channel = window.Echo.private(`chat.${chatId}`);
+                
+                // Also set up call listener after chat channel is connected
+                channel.subscribed(() => {
+                    console.log('Chat channel subscribed, now setting up call listener');
+                    // Set up user call listener after chat channel is ready
+                    setTimeout(setupUserCallListener, 500);
+                });
                 
                 // Listen for new messages
                 channel.listen('.message.sent', (data) => {
@@ -1401,6 +1414,7 @@ let callChannel = null;
 let isVideoCall = false;
 let isMicMuted = false;
 let isCameraOn = false;
+let pendingCallType = null; // Store the call type from CallOffer
 
 // Call UI elements (will be created dynamically)
 let callModal = null;
@@ -1429,10 +1443,23 @@ function initializeWebRTC() {
             callAudio.srcObject = remoteStream;
         }
         
-        // Handle video
+        // Handle video - show remote video in center (opponent's video)
         if (remoteVideo && event.track.kind === 'video') {
             remoteVideo.srcObject = remoteStream;
             remoteVideo.style.display = 'block';
+            console.log('Remote video stream received and displayed in center');
+            
+            // Ensure video container is visible and hide profile picture
+            const videoContainer = document.getElementById('videoContainer');
+            if (videoContainer) {
+                videoContainer.style.display = 'block';
+            }
+            
+            // Hide profile picture when video is active
+            const callInfoSection = document.getElementById('callInfoSection');
+            const callParticipants = document.querySelector('.call-participants');
+            if (callInfoSection) callInfoSection.style.display = 'none';
+            if (callParticipants) callParticipants.style.display = 'none';
         }
     };
     
@@ -1479,13 +1506,116 @@ window.startVideoCall = async function() {
 // Initiate call (voice or video)
 async function initiateCall(type) {
     try {
+        // Stop any existing stream first and wait a bit for cleanup
+        stopLocalStream();
+        await new Promise(resolve => setTimeout(resolve, 300)); // Wait 300ms for cleanup
+        
+        // Check if getUserMedia is available
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            // Check if we're on HTTP (mobile browsers require HTTPS for camera/mic)
+            const isHTTPS = window.location.protocol === 'https:';
+            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            
+            if (!isHTTPS && !isLocalhost) {
+                alert('Camera/microphone access requires HTTPS on mobile devices.\n\nFor local testing, you can:\n1. Use ngrok to create HTTPS tunnel\n2. Or test on desktop browser (localhost works with HTTP)\n\nSee MOBILE_TESTING.md for ngrok setup instructions.');
+            } else {
+                alert('Your browser does not support camera/microphone access. Please use a modern browser like Chrome, Firefox, or Edge.');
+            }
+            return;
+        }
+        
         const constraints = {
             audio: true,
             video: type === 'video'
         };
         
-        localStream = await navigator.mediaDevices.getUserMedia(constraints);
-        isCameraOn = type === 'video';
+        // Retry logic for NotReadableError
+        let retries = 2;
+        let localStreamObtained = false;
+        
+        while (retries > 0 && !localStreamObtained) {
+            try {
+                console.log('Requesting user media with constraints:', constraints, 'Retries left:', retries);
+                localStream = await navigator.mediaDevices.getUserMedia(constraints);
+                console.log('Successfully got user media, tracks:', localStream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled, label: t.label})));
+                isCameraOn = type === 'video';
+                localStreamObtained = true;
+            } catch (mediaError) {
+                retries--;
+                
+                if (mediaError.name === 'NotReadableError' || mediaError.name === 'TrackStartError') {
+                    if (retries > 0) {
+                        console.log('NotReadableError, stopping streams and retrying in 500ms...');
+                        stopLocalStream();
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        continue;
+                    }
+                }
+                
+                // If we're out of retries or it's a different error, handle it
+                console.error('Error getting user media:', mediaError);
+            console.error('Error name:', mediaError.name);
+            console.error('Error message:', mediaError.message);
+            
+            let errorMessage = 'Failed to access ';
+            if (type === 'video') {
+                errorMessage += 'camera/microphone';
+            } else {
+                errorMessage += 'microphone';
+            }
+            errorMessage += '. ';
+            
+            if (mediaError.name === 'NotAllowedError' || mediaError.name === 'PermissionDeniedError') {
+                errorMessage += 'Please allow camera/microphone access in your browser settings. ';
+                errorMessage += 'Click the lock icon (🔒) in the address bar and enable permissions, then refresh the page.';
+            } else if (mediaError.name === 'NotFoundError' || mediaError.name === 'DevicesNotFoundError') {
+                errorMessage += 'No camera/microphone found. Please connect a device.';
+            } else if (mediaError.name === 'NotReadableError' || mediaError.name === 'TrackStartError') {
+                errorMessage += 'Camera/microphone is being used by another application. Please close other apps using the camera/mic.';
+            } else if (mediaError.name === 'OverconstrainedError' || mediaError.name === 'ConstraintNotSatisfiedError') {
+                errorMessage += 'Camera/microphone settings are not supported. Trying audio only...';
+                // Try audio only
+                try {
+                    const audioConstraints = { audio: true };
+                    localStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+                    isCameraOn = false;
+                    type = 'voice';
+                    console.log('Got audio only stream, switching to voice call');
+                } catch (audioError) {
+                    alert(errorMessage);
+                    return;
+                }
+            } else {
+                errorMessage += 'Error: ' + mediaError.message + '. Please try again or refresh the page.';
+            }
+            
+            // For video calls, try with audio only if video fails
+            if (type === 'video' && (mediaError.name === 'NotAllowedError' || mediaError.name === 'NotReadableError')) {
+                console.log('Video access failed, trying audio only...');
+                try {
+                    const audioConstraints = { audio: true };
+                    localStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+                    isCameraOn = false;
+                    type = 'voice';
+                    console.log('Got audio only stream, switching to voice call');
+                } catch (audioError) {
+                    alert(errorMessage);
+                    return;
+                }
+            } else if (type === 'video' && mediaError.name !== 'OverconstrainedError') {
+                alert(errorMessage);
+                return;
+            } else {
+                alert(errorMessage);
+                return;
+            }
+            }
+        }
+        
+        if (!localStreamObtained) {
+            alert('Failed to access camera/microphone after retries. Please refresh the page and try again.');
+            return;
+        }
         
         initializeWebRTC();
         
@@ -1496,7 +1626,10 @@ async function initiateCall(type) {
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
         
-        const response = await fetch('/call/initiate', {
+        // Use relative URL to work with both localhost and ngrok
+        const callInitiateUrl = '/call/initiate';
+        
+        const response = await fetch(callInitiateUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1511,7 +1644,33 @@ async function initiateCall(type) {
             })
         });
         
-        const data = await response.json();
+        let data;
+        try {
+            const responseText = await response.text();
+            data = responseText ? JSON.parse(responseText) : {};
+        } catch (e) {
+            console.error('Failed to parse response:', e);
+            data = { error: 'Failed to parse server response' };
+        }
+        
+        if (!response.ok) {
+            console.error('Call initiate failed:', {
+                status: response.status,
+                statusText: response.statusText,
+                error: data.error || 'Unknown error',
+                data: data
+            });
+            alert('Failed to start call: ' + (data.error || `HTTP ${response.status}`));
+            stopLocalStream();
+            return;
+        }
+        
+        if (!data.success) {
+            console.error('Call initiate returned unsuccessful:', data);
+            alert('Failed to start call: ' + (data.error || 'Unknown error'));
+            stopLocalStream();
+            return;
+        }
         if (data.success) {
             currentCallId = data.call_id;
             isCaller = true;
@@ -1569,6 +1728,7 @@ function handleIncomingCall(data) {
     
     const callType = data.type || 'voice';
     isVideoCall = callType === 'video';
+    pendingCallType = callType; // Store the call type for use when answering
     
     console.log('Incoming call - callId:', currentCallId, 'type:', callType, 'isVideoCall:', isVideoCall);
     
@@ -1649,23 +1809,112 @@ window.answerCall = async function(accepted = true) {
             return;
         }
         
-        const isVideo = offerData.sdp && offerData.sdp.includes('m=video');
+        // Use the call type from CallOffer event, not from SDP (more reliable)
+        let isVideo = pendingCallType === 'video' || (offerData.sdp && offerData.sdp.includes('m=video'));
         isVideoCall = isVideo;
         isCameraOn = isVideo;
         
-        console.log('Answering call - isVideo:', isVideo);
+        console.log('Answering call - pendingCallType:', pendingCallType, 'isVideo:', isVideo, 'isVideoCall:', isVideoCall);
         
-        const constraints = {
+        // Stop any existing stream first and wait for cleanup
+        stopLocalStream();
+        await new Promise(resolve => setTimeout(resolve, 300)); // Wait 300ms for cleanup
+        
+        // Check if getUserMedia is available
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            // Check if we're on HTTP (mobile browsers require HTTPS for camera/mic)
+            const isHTTPS = window.location.protocol === 'https:';
+            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            
+            if (!isHTTPS && !isLocalhost) {
+                alert('Camera/microphone access requires HTTPS on mobile devices.\n\nFor local testing, you can:\n1. Use ngrok to create HTTPS tunnel\n2. Or test on desktop browser (localhost works with HTTP)\n\nSee MOBILE_TESTING.md for ngrok setup instructions.');
+            } else {
+                alert('Your browser does not support camera/microphone access. Please use a modern browser like Chrome, Firefox, or Edge.');
+            }
+            endCall();
+            return;
+        }
+        
+        let constraints = {
             audio: true,
             video: isVideo
         };
         
-        try {
-            localStream = await navigator.mediaDevices.getUserMedia(constraints);
-            console.log('Got user media, tracks:', localStream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled})));
-        } catch (mediaError) {
-            console.error('Error getting user media:', mediaError);
-            alert('Failed to access ' + (isVideo ? 'camera/microphone' : 'microphone') + '. Please check permissions.');
+        // Retry logic for NotReadableError
+        let retries = 2;
+        let localStreamObtained = false;
+        
+        while (retries > 0 && !localStreamObtained) {
+            try {
+                console.log('Answering call - requesting user media with constraints:', constraints, 'Retries left:', retries);
+                localStream = await navigator.mediaDevices.getUserMedia(constraints);
+                console.log('Successfully got user media, tracks:', localStream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled, label: t.label})));
+                localStreamObtained = true;
+            } catch (mediaError) {
+                retries--;
+                
+                if (mediaError.name === 'NotReadableError' || mediaError.name === 'TrackStartError') {
+                    if (retries > 0) {
+                        console.log('NotReadableError, stopping streams and retrying in 500ms...');
+                        stopLocalStream();
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        continue;
+                    }
+                }
+                
+                // If we're out of retries or it's a different error, handle it
+                console.error('Error getting user media:', mediaError);
+                console.error('Error name:', mediaError.name);
+                console.error('Error message:', mediaError.message);
+                
+                let errorMessage = 'Failed to access ';
+                if (isVideo) {
+                    errorMessage += 'camera/microphone';
+                } else {
+                    errorMessage += 'microphone';
+                }
+                errorMessage += '. ';
+                
+                if (mediaError.name === 'NotAllowedError' || mediaError.name === 'PermissionDeniedError') {
+                    errorMessage += 'Please allow camera/microphone access in your browser settings. ';
+                    errorMessage += 'Click the lock icon in the address bar and enable permissions, then refresh the page.';
+                } else if (mediaError.name === 'NotFoundError' || mediaError.name === 'DevicesNotFoundError') {
+                    errorMessage += 'No camera/microphone found. Please connect a device.';
+                } else if (mediaError.name === 'NotReadableError' || mediaError.name === 'TrackStartError') {
+                    errorMessage += 'Camera/microphone is being used by another application. Please close other apps using the camera/mic and refresh the page.';
+                } else {
+                    errorMessage += 'Error: ' + mediaError.message + '. Please try again or refresh the page.';
+                }
+                
+                // For video calls, try with audio only if video fails
+                if (isVideo && (mediaError.name === 'NotAllowedError' || mediaError.name === 'NotReadableError')) {
+                    console.log('Video access failed, trying audio only...');
+                    try {
+                        const audioConstraints = { audio: true };
+                        localStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+                        isVideo = false;
+                        isVideoCall = false;
+                        isCameraOn = false;
+                        constraints.video = false; // Update constraints for consistency
+                        console.log('Got audio only stream, switching to voice call');
+                        localStreamObtained = true;
+                        break;
+                    } catch (audioError) {
+                        console.error('Audio only also failed:', audioError);
+                        alert(errorMessage);
+                        endCall();
+                        return;
+                    }
+                } else {
+                    alert(errorMessage);
+                    endCall();
+                    return;
+                }
+            }
+        }
+        
+        if (!localStreamObtained) {
+            alert('Failed to access camera/microphone after retries. Please refresh the page and try again.');
             endCall();
             return;
         }
@@ -1805,13 +2054,28 @@ window.endCall = async function() {
     isVideoCall = false;
     isMicMuted = false;
     isCameraOn = false;
+    pendingCallType = null; // Clear pending call type
 }
 
 // Stop local stream
 function stopLocalStream() {
     if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
+        console.log('Stopping local stream tracks:', localStream.getTracks().length);
+        localStream.getTracks().forEach(track => {
+            track.stop();
+            console.log('Stopped track:', track.kind, track.label);
+        });
         localStream = null;
+    }
+    
+    // Also stop any video elements
+    if (localVideo && localVideo.srcObject) {
+        localVideo.srcObject.getTracks().forEach(track => track.stop());
+        localVideo.srcObject = null;
+    }
+    if (remoteVideo && remoteVideo.srcObject) {
+        remoteVideo.srcObject.getTracks().forEach(track => track.stop());
+        remoteVideo.srcObject = null;
     }
 }
 
@@ -1941,7 +2205,7 @@ function createCallUI() {
                     </div>
                 </div>
                 
-                <div class="call-info-section">
+                <div class="call-info-section" id="callInfoSection">
                     <div class="call-status-text">In Call with</div>
                     <div class="call-participant-name">{{ $otherUser->info->name }} {{ $otherUser->info->surname }}</div>
                     <div id="callDuration" class="call-duration-display">00:00</div>
@@ -1955,14 +2219,12 @@ function createCallUI() {
                 <div class="call-main-controls" id="callControls">
                     <button id="micBtn" class="main-control-btn mute-btn" onclick="toggleMic()" title="Mute">
                         <i class="fas fa-microphone"></i>
-                        <span class="control-label">Mute</span>
                     </button>
                     <button class="main-control-btn end-call-main-btn" onclick="endCall()" title="End call">
                         <i class="fas fa-phone-slash"></i>
                     </button>
                     <button id="videoBtn" class="main-control-btn video-toggle-btn" onclick="toggleVideo()" title="Video" style="display: none;">
                         <i class="fas fa-video"></i>
-                        <span class="control-label">Video</span>
                     </button>
                 </div>
                 
@@ -2042,10 +2304,15 @@ async function toggleCamera() {
                 }
             }
             
+            // Show/hide local video in top-right corner
             if (localVideo) {
                 localVideo.style.display = isCameraOn ? 'block' : 'none';
             }
+        } else {
+            console.warn('No video tracks available in local stream');
         }
+    } else {
+        console.warn('Cannot toggle camera: not a video call or no local stream');
     }
 }
 
@@ -2059,16 +2326,40 @@ function updateActiveCallUI(type) {
     
     // Show/hide video elements
     const videoContainer = document.getElementById('videoContainer');
+    const callInfoSection = document.getElementById('callInfoSection');
+    const callParticipants = document.querySelector('.call-participants');
+    
     if (type === 'video') {
-        if (videoContainer) videoContainer.style.display = 'block';
-        if (localVideo) localVideo.style.display = 'block';
-        if (remoteVideo) remoteVideo.style.display = 'block';
+        // Show video container, hide profile picture and info (both caller and receiver)
+        if (videoContainer) {
+            videoContainer.style.display = 'block';
+            videoContainer.style.flex = '1';
+        }
+        if (callInfoSection) callInfoSection.style.display = 'none';
+        if (callParticipants) callParticipants.style.display = 'none';
+        
+        // Show remote video (opponent)
+        if (remoteVideo) {
+            remoteVideo.style.display = 'block';
+        }
+        
+        // Show local video only if camera is on
+        if (localVideo) {
+            localVideo.style.display = isCameraOn ? 'block' : 'none';
+        }
+        
+        // Show video toggle button for both caller and receiver
         const videoBtn = document.getElementById('videoBtn');
         if (videoBtn) videoBtn.style.display = 'flex';
     } else {
+        // Hide video container, show profile picture and info
         if (videoContainer) videoContainer.style.display = 'none';
+        if (callInfoSection) callInfoSection.style.display = 'block';
+        if (callParticipants) callParticipants.style.display = 'flex';
+        
         if (localVideo) localVideo.style.display = 'none';
         if (remoteVideo) remoteVideo.style.display = 'none';
+        
         const videoBtn = document.getElementById('videoBtn');
         if (videoBtn) videoBtn.style.display = 'none';
     }
@@ -2088,43 +2379,107 @@ function updateActiveCallUI(type) {
 }
 
 // Listen for incoming calls via WebSocket
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('Setting up call listener for user {{ $user->id }}');
-    
-    function setupCallListener() {
-        if (window.Echo) {
-            console.log('Echo is available, setting up listener');
-            try {
-                const userChannel = window.Echo.private(`user.{{ $user->id }}`);
-                console.log('User channel created:', userChannel);
-                
-                userChannel.listen('.call.offer', (data) => {
-                    console.log('Incoming call offer received:', data);
-                    handleIncomingCall(data);
-                });
-                
-                // Also listen for connection status
-                userChannel.subscribed(() => {
-                    console.log('Subscribed to user channel for incoming calls');
-                });
-                
-                userChannel.error((error) => {
-                    console.error('Error subscribing to user channel:', error);
-                });
-            } catch (error) {
-                console.error('Error setting up call listener:', error);
-            }
-        } else {
-            console.warn('Echo is not available, retrying in 1 second...');
-            setTimeout(setupCallListener, 1000);
-        }
+let userCallChannel = null;
+let callListenerSetup = false;
+
+function setupUserCallListener() {
+    // Prevent multiple setups
+    if (callListenerSetup && userCallChannel) {
+        console.log('Call listener already set up');
+        return;
     }
     
-    // Try immediately and with delays
-    setupCallListener();
-    setTimeout(setupCallListener, 1000);
-    setTimeout(setupCallListener, 2000);
-    setTimeout(setupCallListener, 3000);
+    if (!window.Echo) {
+        console.warn('Echo is not available for call listener');
+        return;
+    }
+    
+    console.log('Setting up call listener for user {{ $user->id }}');
+    
+    try {
+        const userId = {{ $user->id }};
+        const channelName = `user.${userId}`;
+        console.log('Creating user channel for calls:', channelName);
+        
+        userCallChannel = window.Echo.private(channelName);
+        console.log('User channel created:', userCallChannel);
+        
+        // Listen for subscription success FIRST
+        userCallChannel.subscribed(() => {
+            console.log('✅ Successfully subscribed to user channel for incoming calls');
+            callListenerSetup = true;
+            
+            // Test: Log that we're ready to receive calls
+            console.log('📞 Ready to receive incoming calls on channel:', channelName);
+        });
+        
+        // Listen for subscription errors
+        userCallChannel.error((error) => {
+            console.error('❌ Error subscribing to user channel:', error);
+            console.error('Error details:', JSON.stringify(error, null, 2));
+            callListenerSetup = false;
+        });
+        
+        // Listen for incoming call offers
+        // Try both with and without the dot prefix
+        userCallChannel.listen('call.offer', (data) => {
+            console.log('=== INCOMING CALL OFFER RECEIVED (without dot) ===');
+            console.log('Call offer data:', data);
+            handleIncomingCall(data);
+        });
+        
+        userCallChannel.listen('.call.offer', (data) => {
+            console.log('=== INCOMING CALL OFFER RECEIVED (with dot) ===');
+            console.log('Call offer data:', data);
+            handleIncomingCall(data);
+        });
+        
+        // Also listen to all events for debugging
+        userCallChannel.listen('*', (eventName, data) => {
+            console.log('📡 Received event on user channel:', eventName, data);
+        });
+        
+        // Log connection state
+        console.log('User channel subscription state:', {
+            channel: channelName,
+            hasSubscription: !!userCallChannel.subscription,
+            socketId: window.Echo?.socketId || 'not connected',
+            echoConnected: window.Echo?.connector?.pusher?.connection?.state || 'unknown'
+        });
+        
+        // Monitor connection state changes
+        if (window.Echo && window.Echo.connector && window.Echo.connector.pusher) {
+            const pusher = window.Echo.connector.pusher;
+            pusher.connection.bind('connected', () => {
+                console.log('✅ Pusher connected, socket ID:', pusher.connection.socket_id);
+            });
+            pusher.connection.bind('disconnected', () => {
+                console.log('❌ Pusher disconnected');
+            });
+            pusher.connection.bind('error', (error) => {
+                console.error('❌ Pusher connection error:', error);
+            });
+        }
+        
+        console.log('Call listener setup complete, waiting for subscription...');
+    } catch (error) {
+        console.error('Error setting up call listener:', error);
+        console.error('Error stack:', error.stack);
+        callListenerSetup = false;
+    }
+}
+
+// Set up call listener when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Try to set up immediately if Echo is ready
+    if (window.Echo) {
+        console.log('Echo is ready on DOMContentLoaded, setting up call listener');
+        setupUserCallListener();
+    }
+    
+    // Also try with delays in case Echo initializes later
+    setTimeout(setupUserCallListener, 2000);
+    setTimeout(setupUserCallListener, 5000);
 });
 
 // Call duration timer
@@ -2481,24 +2836,30 @@ scrollToBottom();
     border-radius: 12px;
     overflow: hidden;
     background: #000;
+    min-height: 400px;
 }
 
 #remoteVideo {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    position: absolute;
+    top: 0;
+    left: 0;
 }
 
 #localVideo {
     position: absolute;
     top: 20px;
     right: 20px;
-    width: 120px;
-    height: 160px;
+    width: 160px;
+    height: 120px;
     object-fit: cover;
     border-radius: 8px;
     border: 2px solid white;
     background: #000;
+    z-index: 10;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 .call-avatar-container {
@@ -2874,24 +3235,30 @@ scrollToBottom();
     border-radius: 12px;
     overflow: hidden;
     background: #000;
+    min-height: 400px;
 }
 
 #remoteVideo {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    position: absolute;
+    top: 0;
+    left: 0;
 }
 
 #localVideo {
     position: absolute;
     top: 20px;
     right: 20px;
-    width: 120px;
-    height: 160px;
+    width: 160px;
+    height: 120px;
     object-fit: cover;
     border-radius: 8px;
     border: 2px solid white;
     background: #000;
+    z-index: 10;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 .call-avatar-container {

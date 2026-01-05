@@ -47,16 +47,16 @@ class Message extends Model
         return $this->reactions()->count();
     }
 
-    // Format the message timestamp
+    // Format the message timestamp (Malaysia timezone)
     public function getFormattedTimeAttribute()
     {
-        return $this->created_at->format('H:i');
+        return $this->created_at->setTimezone('Asia/Kuala_Lumpur')->format('H:i');
     }
 
-    // Format the message date
+    // Format the message date (Malaysia timezone)
     public function getFormattedDateAttribute()
     {
-        return $this->created_at->format('M d, Y');
+        return $this->created_at->setTimezone('Asia/Kuala_Lumpur')->format('M d, Y');
     }
     public function isVoiceMessage()
 {

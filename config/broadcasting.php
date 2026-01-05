@@ -37,9 +37,13 @@ return [
             'app_id' => env('PUSHER_APP_ID'),
             'options' => [
                 'cluster' => env('PUSHER_APP_CLUSTER', 'mt1'),
-                'host' => env('PUSHER_HOST', '127.0.0.1'),
-                'port' => env('PUSHER_PORT', 6001),
-                'scheme' => env('PUSHER_SCHEME', 'http'),
+                // IMPORTANT: Server-side broadcasts ALWAYS use localhost WebSocket server
+                // The WebSocket server runs locally on port 6001, not through ngrok
+                // Client-side Echo will use ngrok when accessed via ngrok (handled in app.blade.php)
+                // But server-side must always use localhost for broadcasts
+                'host' => '127.0.0.1', // Force localhost - ignore PUSHER_HOST from .env
+                'port' => 6001, // Force port 6001 - ignore PUSHER_PORT from .env
+                'scheme' => 'http', // Force http - ignore PUSHER_SCHEME from .env
                 'encrypted' => false,
                 'useTLS' => false,
             ],

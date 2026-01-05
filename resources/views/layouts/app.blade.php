@@ -66,9 +66,21 @@
         $broadcastDriver = config('broadcasting.default');
         $pusherKey = config('broadcasting.connections.pusher.key');
         $pusherCluster = config('broadcasting.connections.pusher.options.cluster', 'mt1');
-        $pusherHost = config('broadcasting.connections.pusher.options.host', '127.0.0.1');
-        $pusherPort = config('broadcasting.connections.pusher.options.port', 6001);
-        $pusherScheme = config('broadcasting.connections.pusher.options.scheme', 'http');
+        // Use request host for WebSocket (works for both localhost and mobile/ngrok)
+        $requestHost = request()->getHost();
+        $isLocalhost = in_array($requestHost, ['127.0.0.1', 'localhost']);
+        
+        if ($isLocalhost) {
+            // Use localhost settings when accessing from computer
+            $pusherHost = '127.0.0.1';
+            $pusherPort = 6001; // Always use 6001 for localhost
+            $pusherScheme = 'http';
+        } else {
+            // Use ngrok/mobile settings when accessing from phone or ngrok URL
+            $pusherHost = config('broadcasting.connections.pusher.options.host', $requestHost);
+            $pusherPort = config('broadcasting.connections.pusher.options.port', 443);
+            $pusherScheme = config('broadcasting.connections.pusher.options.scheme', 'https');
+        }
         $shouldEnableWebSocket = ($broadcastDriver === 'pusher' && !empty($pusherKey));
         
         // Debug: Log to Laravel log file

@@ -1,0 +1,47 @@
+===========================================
+  HOW TO ACCESS YOUR APP
+===========================================
+
+AFTER SETTING UP NGROK, YOU CAN ACCESS FROM:
+
+1. COMPUTER (Desktop Browser):
+   ✅ http://127.0.0.1:8000
+   ✅ http://localhost:8000
+   
+   - Still works exactly as before!
+   - Uses local WebSocket (port 6001)
+   - Camera/mic works (localhost exception)
+
+2. PHONE (Mobile Browser):
+   ✅ https://unpeacefully-uncommunicative-karie.ngrok-free.dev
+   
+   - Use this HTTPS URL
+   - Uses ngrok WebSocket tunnel
+   - Camera/mic works (HTTPS required)
+
+===========================================
+  IMPORTANT NOTES
+===========================================
+
+✅ Both URLs work simultaneously
+✅ The app automatically detects which one you're using
+✅ WebSocket config adjusts automatically:
+   - Computer → uses localhost:6001
+   - Phone → uses ngrok HTTPS tunnel
+
+✅ You can test on both at the same time!
+
+===========================================
+  WHAT TO UPDATE IN .env
+===========================================
+
+Update these lines in .env:
+  PUSHER_HOST=unpeacefully-uncommunicative-karie.ngrok-free.dev
+  PUSHER_PORT=443
+  PUSHER_SCHEME=https
+
+This is for the phone/ngrok access.
+Computer access will still use localhost automatically.
+
+===========================================
+

@@ -7,10 +7,11 @@ use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class CallOffer implements ShouldBroadcast
+class CallOffer implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
@@ -60,6 +61,13 @@ class CallOffer implements ShouldBroadcast
      */
     public function broadcastWith()
     {
+        \Log::info('CallOffer broadcastWith called', [
+            'callId' => $this->callId,
+            'receiverId' => $this->receiverId,
+            'type' => $this->type,
+            'hasOffer' => !empty($this->offer)
+        ]);
+        
         return [
             'callId' => $this->callId,
             'call_id' => $this->callId,

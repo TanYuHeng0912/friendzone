@@ -495,7 +495,7 @@ class ChatController extends Controller
                         'id' => $message->id,
                         'message' => $message->message,
                         'sender_name' => $message->sender->info->name ?? 'User',
-                        'formatted_time' => $message->formatted_time ?? $message->created_at->format('H:i'),
+                        'formatted_time' => $message->formatted_time ?? $message->created_at->setTimezone('Asia/Kuala_Lumpur')->format('H:i'),
                         'created_at' => $message->created_at->toISOString()
                     ];
                 })
